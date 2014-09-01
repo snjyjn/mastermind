@@ -1,0 +1,53 @@
+
+0. Problem from:
+http://codegolf.stackexchange.com/questions/36921/mastermind-horse-battery-staple
+Given a dictionary (lower case alpha only), and a collection of pass phrases 
+(3 dictionary words, separated by a single space each)  and a leaky password
+matcher (ala hangman) which returns a count of positions, and characters 
+matched, guess the passphrase with the least number of match attempts.
+
+Solution:
+1. Process the dictionary - read the file, and collect stats.
+   1. Maximum word length
+   2. Minimum word length
+   3. distribution of characters across words
+
+2. Try the following for spaces:
+   Use a series of test strings, each with half the values being a space, 
+   and the other half a ZPC (Zero Probability Character).  Track all 
+   possible pairs of positions that could be spaces, till we have only
+   1 pair left.  This gives the positions of the spaces, and the lengths
+   of the first 2 words.
+
+   In the first phase, the phrase is generated independent of the tuples.  In
+   the second phase, this is based on the potential pairs, and could be as
+   brute force as trying to confirm / eliminate 1 pair at a time.
+
+3. Guess each word separately
+   Word 1: Get a sub dictionary with the known word length
+	   Now repeat till done!
+	       Guess a word, Find exact position matches
+	       Reduce dictionary to only words that have as many pos matches
+
+   Word 2: Similar to word 1
+
+   Word 3: We dont know word length
+	   Use the responses from previous guesses to reduce the dictionary
+	   as much as possible.
+	   Now repeat till done!
+	       Guess a word, Find exact position matches
+	       Reduce dictionary to only words that have as many pos matches
+
+4. Statistics from this approach
+   Blanks : 6862
+   Word 1 words : 5960
+   Word 2 words : 5907
+   Word 3 words : 2953
+   Phrase Confirm : 1000
+   TOTAL  : 21682
+
+   Dict for word 1 : 1157
+   Dict for word 2 : 1172
+   Dict for word 3 : 94
+
+5. Caveats - I have not paid attention to memory management in this!
