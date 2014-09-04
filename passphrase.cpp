@@ -17,18 +17,13 @@ using namespace std;
 PassPhrase::PassPhrase(const string phrase) {
    debug = false;
    this->phrase = phrase;
-   utils::initCounts(counts);
-   utils::countCharacters(phrase, counts);
+   counts.addToCount(phrase);
 }
 
 void
 PassPhrase::debugprint() const {
    cout << phrase << consts::eol;
-   for (int i=0; i<27; ++i) {
-       if (counts[i] > 0) {
-	   cout << utils::itoc(i) << " : " << counts[i] << consts::eol;
-       }
-   }
+   counts.debugprint();
 }
 
 // match the phrase with a candidate.
@@ -54,18 +49,13 @@ PassPhrase::match(string candidate, int &positions, int &characters) const {
 	++c; ++p;
     }
 
-    int candidateCounts[27];
-    utils::initCounts(candidateCounts);
-    utils::countCharacters(candidate, candidateCounts);
-
-    characters = 0;
-    for (int i=0; i<27; ++i) {
-       characters += min(counts[i], candidateCounts[i]);
-    }
+    charCounts candidateCounts;
+    candidateCounts.addToCount(candidate);
+    characters = candidateCounts.match(counts);
 
     bool rc = (positions == candidate.length());
     if (debug) {
-	cout << "@" << candidate << "@" 
+	cout << "@" << candidate.substr(0,65) << "@" 
 	     << ":p " << positions << ":c " << characters
 	     << ": " << rc
 	     << consts::eol;

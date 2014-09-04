@@ -51,3 +51,81 @@ Solution:
    Dict for word 3 : 94
 
 5. Caveats - I have not paid attention to memory management in this!
+
+
+It is possible to reduce this further by the following
+
+1. Use a query string of ([a-z] X maxphraselength + 2) in the first attempt.
+This will return the total length of the string as the character match.
+If the first (maxlength) characters are the most frequent ones, the position 
+count is the actual number of those chars.
+
+1.a Knowing the length reduces the tests in the space finding phase.  The 
+    additinal query pays for itself in this itself, but not much more.
+1.b.Knowing the length also identifies the length of word 3.  This results 
+    in significant savings (upto 1.5 attempts) in while solving for word 3.
+    Additional savings is found in the reduced CPU consumption since the 
+    cost of reducing the dictionary size comes down!
+
+2. Insert additional text in the space finding phase.  This can be used to
+   count low frequency words, and reduce the dictionary size for words 1
+   and 2 as well. This reduces the dictionary for words 1 and 2 by about 
+   15 - 20%, and for word3 as well.
+   This saves another attempt overall. 
+
+The results are:
+    Blanks : 6548
+    Word 1 words : 5718
+    Word 2 words : 5722
+    Word 3 words : 1289
+    Phrase Confirm : 1000
+    TOTAL  : 20277
+
+    Dict for word 1 : 915
+    Dict for word 2 : 927
+    Dict for word 3 : 916
+    Dict for word 3(constrained) : 9
+
+There may be some improvements in the way the words are guessed, which could
+result in an additional improvement of 2 more attempt overall, but I think
+this approach stops paying dividends at that time.
+
+Meanwhile Roy figured out a way to do the entire phrase (and not words) which 
+breaks the 14 attempts mark!  Trying to see if we can do better!
+The first phase (length finding and space finding) result in 3 dictionaries
+whose size multiplies to about 800M.  It is clearly infeasible to create
+that in memory, and then apply mastermind type of techniques to guess.
+
+We have to look at 
+a. Reducing the dictionary size.
+   Looking for additional information which can reduce the dictionary size
+   while searching for spaces leads to reduction in dictionary size per word
+   (comes to about 550 to 600).  Applying 1 word reduction brings that down 
+   to about 170.  Hence, after ~ 10 guesses, we are down to 5M combinations.
+
+b. Applying the information we have.
+   A word match results in position and character match information.  The 
+   position information is used to refine the dictionary.  However, it is
+   also possible to use the character match information for all 3 words.
+
+c. Improving the word guess, so that the dictionary shrinks faster.
+   Current strategy is to use a synthetic word the first time, and 
+   then use the word with the most character diversity.
+
+Using these strategies - we bring the number of attempts down to about 18000.
+    Blanks : 6548
+    Word 1 words : 5025
+    Word 2 words : 5016
+    Word 3 words : 470
+    Phrase Confirm : 1000
+    TOTAL  : 18059
+
+This I think is about the limit of of word based techniques. 
+
+However, with phrase based techniques, we should be able to do much better.
+
+
+
+
+
+

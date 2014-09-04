@@ -14,9 +14,7 @@ Dictionary::Dictionary() {
     maxWordLength = 0;
     minWordLength = 0;
     maxUniqChars = 0;
-    for (int i=0; i<27; ++i) {
-	counts[i] = 0;
-    }
+    debug = false;
 }
 
 void
@@ -70,7 +68,7 @@ Dictionary::addEntry(DictionaryEntry *e) {
 	maxUniqChars = e->uniqueCharacterCount();
 	guessWord = e->getWord();
     }
-    e->collateStats(counts);
+    e->collateStats(freq);
 }
 
 bool
@@ -90,35 +88,35 @@ Dictionary::getWordCount() const {
     return entries->size();
 }
 
-bool sortByCount(const int& lhs, const int& rhs) {
-    return (lhs > rhs);
-}
-
-void
-Dictionary::getStats(int frequency[]) const {
-    for (int i=0; i<27; ++i) {
-	frequency[i] = counts[i];
-    }
-}
-
 const string &
 Dictionary::getWord(int i) const {
     return (*entries)[i]->getWord();
 }
 
-const string &
-Dictionary::getGuessWord() const {
-    return guessWord;
+string 
+Dictionary::getGuessWord(int strategy) const {
+    switch(strategy) {
+	case 0:
+	    return createTestWord(0);
+	case 1:
+	    return guessWord;
+	default:
+	    int index = getWordCount()/2;
+	    return getWord(index);
+    }
 }
 
-// Create a synthetic word for the first guess.  For each characterposition
-// identify the most frequent character, and use that to build a word!
+// Create a synthetic word for the first guess.  
+// Strategy 0: For each character position identify the most frequent character
+// Strategy 1: For each character position identify the least frequent character
+// and use that to build a word!  string
+// Strategy 1 sucks!
 string
-Dictionary::createTestWord() const {
+Dictionary::createTestWord(int strategy) const {
     // Initialize data structures
-    int charFrequencyByPosition[maxWordLength][27];
+    int charFrequencyByPosition[maxWordLength][charCounts::charArraySize];
     for (int i=0; i<maxWordLength; ++i) {
-	for (int j=0; j<27; ++j) {
+	for (int j=0; j<charCounts::charArraySize; ++j) {
 	    charFrequencyByPosition[i][j] = 0;
 	}
     }
@@ -132,20 +130,49 @@ Dictionary::createTestWord() const {
 	    charFrequencyByPosition[i][j]++;
 	}
     }
+    string rc;
 
     // For each position, get the max count, and associated character.
     // Use that to build the test word.
-    string rc;
+    int dictsize = getWordCount();
     for (int i=0; i<maxWordLength; ++i) {
 	int maxCount=0; 
+	int minCount=dictsize; 
 	char maxChar;
-	for (int j=0; j<27; ++j) {
+	char minChar;
+	for (int j=0; j<charCounts::charArraySize; ++j) {
 	    if (charFrequencyByPosition[i][j] > maxCount) {
-		maxCount= charFrequencyByPosition[i][j];
+		maxCount = charFrequencyByPosition[i][j];
 		maxChar = utils::itoc(j);
 	    }
+	    if (charFrequencyByPosition[i][j] < minCount) {
+		minCount = charFrequencyByPosition[i][j];
+		minChar = utils::itoc(j);
+	    }
 	}
-	rc.append(1, maxChar);
+	switch(strategy) {
+	    case 0:
+		rc.append(1, maxChar);
+		break;
+	    case 1:
+		rc.append(1, minChar);
+		break;
+	}
+    }
+    return rc;
+}
+
+string 
+Dictionary::getCharsByFrequency() const {
+    string rc = freq.getCharsByFrequency();
+    if (debug) {
+	cout << "Dict Counts" << consts::eol;
+	for (int j=0; j<rc.length(); ++j) {
+	    char c = rc[j];
+	    int i = utils::ctoi(c);
+	    int count = freq[i];
+	    cout << c << ": " << count << consts::eol;
+	}
     }
     return rc;
 }
@@ -172,6 +199,7 @@ Dictionary::getSubDictionary(int size) {
 Dictionary *
 Dictionary::getSubDictionary(string word, int positionMatches) const {
     Dictionary *sub = new Dictionary();
+    DictionaryEntry *self = NULL;
     for (vector<DictionaryEntry *>::iterator it=entries->begin(); 
          it!= entries->end(); ++it) {
 	DictionaryEntry *de = (*it);
@@ -183,15 +211,22 @@ Dictionary::getSubDictionary(string word, int positionMatches) const {
 	    }
 	}
 	if (m == positionMatches) {
-	    sub->addEntry(de);
+	    if (word == entry_word) {
+		self = de;
+	    } else {
+		sub->addEntry(de);
+	    }
 	}
+    }
+    if (sub->getWordCount() == 0) {
+	sub->addEntry(self);
     }
     return sub;
 }
 
 // Apply a collection of constraints to a dictionary to get a subdict.
 Dictionary *
-Dictionary::getSubDictionary(vector<DictionaryConstraint *> constr) const {
+Dictionary::getSubDictionary(DictConstraints constr) const {
     Dictionary *sub = new Dictionary();
 
     // For each dictionary  entry
@@ -201,7 +236,7 @@ Dictionary::getSubDictionary(vector<DictionaryConstraint *> constr) const {
 
 	// for each constraint specified
 	bool flag = true;
-	for (vector<DictionaryConstraint *>::iterator dc_it=constr.begin(); 
+	for (DictConstraints::iterator dc_it=constr.begin(); 
 	     (dc_it!= constr.end() && (flag == true)); ++dc_it) {
 	    DictionaryConstraint *dc = (*dc_it);
 
@@ -222,37 +257,25 @@ Dictionary::getSubDictionary(vector<DictionaryConstraint *> constr) const {
 DictionaryEntry::DictionaryEntry(string word) {
     this->word = word;
     this->len = word.length();
-    for (int i=0; i<27; ++i) { counts[i] = 0; }
-    for (string::const_iterator it = word.cbegin(); it != word.cend(); ++it) {
-	counts[utils::ctoi(*it)] += 1;
-    }
-    uniqChars = 0;
-    for (int i=0; i<27; ++i) { 
-	if (counts[i] > 0) {
-	    uniqChars++;
-	}
-    }
+    freq.addToCount(word);
+    uniqChars = freq.uniqCounts();
 }
 
 int 
 DictionaryEntry::characterMatch(const DictionaryEntry* de) const {
-    return characterMatch(de->counts);
+    return freq.match(de->freq);
 }
 
 int 
-DictionaryEntry::characterMatch(const int counts[]) const {
-    int rc = 0;
-    for (int i=0; i<27; ++i) {
-	rc += min(counts[i], this->counts[i]);
-    }
-    return rc;
+DictionaryEntry::characterMatch(const charCounts& cc) const {
+    return freq.match(cc);
 }
 
 void
-DictionaryEntry::collateStats(int frequency[]) const {
-    for (int i=0; i<27; ++i) {
-	if (counts[i] > 0) {
-	    frequency[i] += 1;
+DictionaryEntry::collateStats(charCounts& frequency) const {
+    for (int i=0; i<charCounts::charArraySize; ++i) {
+	if (freq[i] > 0) {
+	    frequency[i]++;
 	}
     }
 }
@@ -281,16 +304,26 @@ DictionaryEntry::~DictionaryEntry() {
     assert(false);
 }
 
-CharMatchConstraint::CharMatchConstraint(int charCounts[], int matchCount) {
-    utils::initCounts(counts);
-    for (int i=0; i<27; ++i) {
-	this->counts[i] = charCounts[i];
-    }
-    this->charMatchCount = matchCount;
+CharMatchConstraint::
+CharMatchConstraint(charCounts candidateCounts, int matchCount) {
+    counts = candidateCounts;
+    charMatchCount = matchCount;
 }
 
 bool 
 CharMatchConstraint::match(DictionaryEntry *de) const {
     int matchCount = de->characterMatch(counts);
     return (matchCount == charMatchCount);
+}
+
+CharMatchWordConstraint::
+CharMatchWordConstraint(charCounts candidateCounts, int matchCount) {
+    counts = candidateCounts;
+    charMatchCount = matchCount;
+}
+
+bool 
+CharMatchWordConstraint::match(DictionaryEntry *de) const {
+    int matchCount = de->characterMatch(counts);
+    return (matchCount <= charMatchCount);
 }

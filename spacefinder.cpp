@@ -6,15 +6,17 @@
 #include "utils.h"
 #include "spacefinder.h"
 #include "passphrase.h"
+#include "dictionary.h"
 
 using namespace std;
 
 // Constructor - not very interesting
-SpaceFinder::SpaceFinder(PassPhrase *p, int minWordLen, int maxWordLen) {
+SpaceFinder::SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, int maxWordLen, int phraseLen) {
     this->p = p;
+    this->d = d;
     this->minWordLen = minWordLen;
     this->maxWordLen = maxWordLen;
-    this->maxPhraseLength = 3 * (1 + maxWordLen);
+    this->maxPhraseLength = phraseLen;
     debug = false;
 }
 
@@ -146,8 +148,8 @@ SpaceFinder::excludeSet(vector<int> &coll) {
 }
 
 
-string 
-SpaceFinder::findSpaces(int &space1, int &space2) {
+DictConstraints&
+SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
     // Setup the internal state to be clean based on all possible information
     initialize();
 
@@ -164,6 +166,14 @@ SpaceFinder::findSpaces(int &space1, int &space2) {
     // Always have half as space, and half as invalid.  The number of contiguous
     // spaces halves in each iteration till we get to 1.
 
+    // Additional information strategy.  Append the string with low frequency
+    // characters - the character match count will be 2 + count(char)
+    // When this is 0, we can reduce dictionary size for words 1 & 2
+    // In any case, this should help word 3 significantly!
+    string dictFreq = d->getCharsByFrequency();  // Should be static?
+    int additionalInfoIndex = dictFreq.size() -1; // start from tail
+    DictConstraints *rc = new DictConstraints();
+
     int targetContigLength = countUnknowns/2;
 
     // The candidate phrase
@@ -178,10 +188,33 @@ SpaceFinder::findSpaces(int &space1, int &space2) {
 	// The candidate phrase
 	phrase = buildTestString(targetContigLength, test_group, ignore_group);
 
+	// Additional Testing sneaked in here!
+	string testChars;
+	char additionalTestChar = dictFreq[additionalInfoIndex];
+	additionalInfoIndex--;
+	testChars.append(maxPhraseLength, additionalTestChar);
+	additionalTestChar = dictFreq[additionalInfoIndex];
+	additionalInfoIndex--;
+	testChars.append(maxPhraseLength, additionalTestChar);
+	additionalTestChar = dictFreq[additionalInfoIndex];
+	additionalInfoIndex--;
+	testChars.append(maxPhraseLength, additionalTestChar);
+	charCounts testCounts;
+	testCounts.addToCount(testChars);
+
+	phrase.append(testChars);
+
 	// Test the candidate phrase againt the passphrase
 	int pos, chars;
 	p->match(phrase, pos, chars);
+
+	hist.push_back(new GuessHistoryElement(phrase, pos, chars));
 	processMatchResponse(pos, test_group, ignore_group);
+
+	int additionalTestCharCount = chars - 2;
+
+	DictionaryConstraint *dc = new CharMatchWordConstraint(testCounts, additionalTestCharCount);
+	rc->push_back(dc);
 
 	if (debug) {
 	    debugPhrase = buildDebugString();
@@ -204,10 +237,28 @@ SpaceFinder::findSpaces(int &space1, int &space2) {
 	// The candidate phrase
 	phrase = buildTestString(test_group, ignore_group);
 
+	// Additional Testing sneaked in here!
+	string testChars;
+	char additionalTestChar = dictFreq[additionalInfoIndex];
+	additionalInfoIndex--;
+	testChars.append(maxPhraseLength, additionalTestChar);
+	additionalTestChar = dictFreq[additionalInfoIndex];
+	additionalInfoIndex--;
+	phrase.append(testChars);
+
+	charCounts testCounts;
+	testCounts.addToCount(testChars);
+
 	// Test the candidate phrase againt the passphrase
 	int pos, chars;
 	p->match(phrase, pos, chars);
+
+	hist.push_back(new GuessHistoryElement(phrase, pos, chars));
 	processMatchResponse(pos, test_group, ignore_group);
+
+	int additionalTestCharCount = chars - 2;
+	DictionaryConstraint *dc = new CharMatchWordConstraint(testCounts, additionalTestCharCount);
+	rc->push_back(dc);
 
 	// Created a phrase, tested it, applied the knowledge to internal state
 
@@ -218,7 +269,7 @@ SpaceFinder::findSpaces(int &space1, int &space2) {
 	}
     }
     getPair(space1, space2);
-    return phrase;
+    return *rc;
 }
 
 // Process the response from the matcher.

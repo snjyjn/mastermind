@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <vector>
 
+#include "utils.h"
 #include "passphrase.h"
+#include "dictionary.h"
 
 using namespace std;
 
@@ -19,12 +21,14 @@ using namespace std;
 class SpaceFinder {
     public:
 	// Constructor
-	SpaceFinder(PassPhrase *p, int minWordLen, int maxWordLen);
+	SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, 
+	            int maxWordLen, int phraseLen);
 
 	// The main entry point to this class
-	string findSpaces(int &space1, int &space2);
+	DictConstraints& findSpaces(GuessHistory &hist, int &space1, int &space2);
 
 	void debugprint() const;
+
     private:
 	// create a string for display purposes only
 	string buildDebugString() const;
@@ -61,6 +65,7 @@ class SpaceFinder {
 
 	// External State - maintained for ease of use
 	PassPhrase *p;
+	Dictionary *d;
 	int minWordLen;
 	int maxWordLen;
 	int maxPhraseLength;
@@ -77,5 +82,22 @@ class SpaceFinder {
 // For each pair of positions, (i,j), where i < j, if i and j can be the 2
 // positions for spaces, possible[i][j] = 1, else it is 0
 	int **possible;
+};
+
+class TestPatternGenerator {
+public:
+    TestPatternGenerator(Dictionary *d);
+
+    // Get a test pattern, to be used when there are no other alpha 
+    // chars in the test string.  
+    // id 0: Returns a string with all 26 alphabets, repeated max times
+    //       with the first max characters being the most frequent char
+    // This returns the size of the phrase.
+    // id 1-4: return a string with low freqeuncy character combinations,
+    //       which can be used to reduce the dictionary size.
+    const string& getPattern(int id);
+
+private:
+
 };
 #endif

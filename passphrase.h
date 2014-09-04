@@ -39,7 +39,7 @@ class PassPhrase {
 
     private:
 	string phrase;
-	int counts[27];
+	charCounts counts;
 	bool debug;
 };
 #endif
