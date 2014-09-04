@@ -103,9 +103,11 @@ void
 charCounts::debugprint() const {
    for (int i=0; i<charArraySize; ++i) {
        if (counts[i] > 0) {
-	   cout << utils::itoc(i) << " : " << counts[i] << consts::eol;
+	   cout << "(" << utils::itoc(i) << " : " << counts[i] << ")";
+	   cout << consts::spc;
        }
    }
+   cout << consts::eol;
 }
 
 char 
@@ -135,6 +137,13 @@ GuessHistoryElement::GuessHistoryElement(const string word, int pos, int chars) 
     this->pos = pos;
     this->chars = chars;
     counts.addToCount(word);
+}
+
+bool 
+GuessHistoryElement::phraseMatch(const string &candidate) const {
+    charCounts candidateCounts;
+    candidateCounts.addToCount(candidate);
+    return phraseMatch(candidateCounts, candidate);
 }
 
 bool 
@@ -195,7 +204,7 @@ GuessAnalytics::addAttempt() {
 
 void 
 GuessAnalytics::addDictSize(int wordNumber, int attempt, int size) {
-    assert(wordNumber < 4);
+    assert(wordNumber < 5);
     assert(attempt < 50);
     dictSizes[wordNumber][attempt] += size;
     dictSizeCount[wordNumber][attempt]++;
@@ -204,15 +213,13 @@ GuessAnalytics::addDictSize(int wordNumber, int attempt, int size) {
 void 
 GuessAnalytics::printAnalysis() {
     string  names[] = {
-	"Initial String", 
-	"Blanks",
-	"Word 1 chars",
-	"Word 1 words",
-	"Word 2 chars",
-	"Word 2 words",
-	"Word 3 chars",
-	"Word 3 words",
-	"Phrase Confirm"
+	"Length", 
+	"Spaces",
+	"Word 1",
+	"Word 2",
+	"Word 3",
+	"Phrase",
+	"Confirm"
     };
     int total = 0;
     for (int i=0; i<attempts->size(); ++i) {
@@ -224,7 +231,7 @@ GuessAnalytics::printAnalysis() {
     }
     cout << "TOTAL " << " : " << total << consts::eol;
     cout << consts::eol;
-    for (int i=0; i<4; ++i) {
+    for (int i=0; i<5; ++i) {
 	cout << "word " << i;
 	for (int j=0; j<50; ++j) {
 	    if (dictSizeCount[i][j] > 0) {

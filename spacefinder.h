@@ -33,6 +33,9 @@ class SpaceFinder {
 	// create a string for display purposes only
 	string buildDebugString() const;
 
+	// Append a test phrase (additional) for low frequency characters
+	string appendTestPhrase(int counter);
+
 	// Build a string to test for spaces.  Test only unknown positions
 	// Half of which should be in test group, and hald in ignore.
 	// n contiguous positions (defined by contig) should be in the same
@@ -69,6 +72,7 @@ class SpaceFinder {
 	int minWordLen;
 	int maxWordLen;
 	int maxPhraseLength;
+	string dictFreq;
 	bool debug;
 
 // Internal State

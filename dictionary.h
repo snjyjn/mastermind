@@ -63,6 +63,8 @@ class DictionaryEntry {
 class DictionaryConstraint {
     public:
 	virtual bool match(DictionaryEntry *de) const = 0;
+	virtual void explain(DictionaryEntry *de) const = 0;
+	virtual void debugprint() const = 0;
 };
 
 typedef vector<DictionaryConstraint *> DictConstraints;
@@ -75,6 +77,8 @@ class CharMatchConstraint : public DictionaryConstraint {
     public:
 	CharMatchConstraint(charCounts counts, int matchCount);
 	virtual bool match(DictionaryEntry *de) const;
+	virtual void explain(DictionaryEntry *de) const;
+	virtual void debugprint() const;
 
     private:
 	charCounts counts;
@@ -92,6 +96,8 @@ class CharMatchWordConstraint : public DictionaryConstraint {
     public:
 	CharMatchWordConstraint(charCounts counts, int matchCount);
 	virtual bool match(DictionaryEntry *de) const;
+	virtual void explain(DictionaryEntry *de) const;
+	virtual void debugprint() const;
 
     private:
 	charCounts counts;
@@ -105,6 +111,11 @@ class Dictionary {
 
 	// Read the dictionary from the file, 1 word per line
 	void initialize(string filename);
+
+	// For memory manangement, dictionary needs to delete the 
+	// entries.  Since we are wily-nily creataing subdirectories which 
+	// point to the same entry, this has to be used ultra carefully
+	void deleteEntries();
 
 	// Return the i'th word in the dictionary.
 	// Would have been better to implement an iterator
@@ -146,8 +157,14 @@ class Dictionary {
 	// of number of characters (present in the guess)
 	Dictionary *getSubDictionary(string word, int positionMatches) const;
 
+	// Get a subdirectory of all words that match the guess in terms 
+	// of number of characters (present in the guess) and positions
+	Dictionary * getSubDictionary(string word, int pos, int chars) const;
+
 	// Apply a collection of constraints and get a smaller subdictionary
-	Dictionary *getSubDictionary(DictConstraints constr) const;
+	Dictionary *getSubDictionary(DictConstraints constr, bool debugThisCall = false) const;
+
+	void addWord(string word);
 
     private:
 	// A valid word contains only lower case alphabets [a-z]
@@ -155,7 +172,6 @@ class Dictionary {
 
 	bool debug;
 
-	void addWord(string word);
 	void addEntry(DictionaryEntry *e);
 
 	// The actual collection of entries

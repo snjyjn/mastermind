@@ -83,6 +83,8 @@ class GuessHistoryElement {
 	// be compared with historical attempts
 	bool phraseMatch(const charCounts &candidateCounts, const string &candidate) const;
 
+	bool phraseMatch(const string &candidate) const;
+
 	// Use the matcher with words (sub phrases) for early detection of
 	// words that should not be used 
 	// differs in that, it only uses the character counts, and looks for 
@@ -108,18 +110,16 @@ class GuessAnalytics {
 
 	static const int PHRASELEN = 0;
 	static const int WORDLEN = 1;
-	static const int WORD1CHARS = 2;
-	static const int WORD1GUESS = 3;
-	static const int WORD2CHARS = 4;
-	static const int WORD2GUESS = 5;
-	static const int WORD3CHARS = 6;
-	static const int WORD3GUESS = 7;
-	static const int PHRASETEST = 8;
+	static const int WORD1GUESS = 2;
+	static const int WORD2GUESS = 3;
+	static const int WORD3GUESS = 4;
+	static const int PHRASEGUESS = 5;
+	static const int PHRASETEST = 6;
 
     private:
 	int count;
-	int dictSizes[4][50];
-	int dictSizeCount[4][50];
+	int dictSizes[5][50];
+	int dictSizeCount[5][50];
 	int state;
 	vector<int> *attempts;
 };

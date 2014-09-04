@@ -38,16 +38,27 @@ class Mastermind {
 
 	    vector<GuessHistoryElement *> guessHistory;
 
+	    // Setup a collection of constraints that we will want to apply
+	    // to individual words / sub phrases
+	    DictConstraints wordConstraints;
+
+	    // Similarly for phrases
+	    DictConstraints phraseConstraints;
+
 	    //
 	    // Step 0. Find the length of the passphrase
 	    //
 	    analytics->setState(GuessAnalytics::PHRASELEN);
 	    char firstChar; int firstCharCount;
 	    findPhraseLength(guessHistory, firstChar, firstCharCount);
+
 	    string first;
 	    first.append(firstCharCount, firstChar);
 	    charCounts firstCount;
 	    firstCount.addToCount(first);
+
+	    // The phrase shall contain exactly so many chars ...
+	    phraseConstraints.push_back(new CharMatchConstraint(firstCount, firstCharCount));
 
 	    //
 	    // Step 1. Find the spaces.  Use SpaceFinder for this purpose
@@ -56,7 +67,7 @@ class Mastermind {
 	    int space2 = -1;
 	    analytics->setState(GuessAnalytics::WORDLEN);
 	    SpaceFinder *sf = new SpaceFinder(p, dict, minLength, maxLength, phraseLength);
-	    DictConstraints wordConstraints 
+	    wordConstraints
 		= sf->findSpaces(guessHistory, space1, space2);
 	    DictionaryConstraint *dc 
 		= new CharMatchWordConstraint(firstCount, firstCharCount);
@@ -65,65 +76,59 @@ class Mastermind {
 	    // Reduce the dictionary based on the extra information 
 	    // obtained while finding the spaces!
 	    Dictionary *d0 = dict->getSubDictionary(wordConstraints);
-	    analytics->addDictSize(3, 0, d0->getWordCount());
-	    wordConstraints.clear();
+	    analytics->addDictSize(0, 0, d0->getWordCount());
 
+	    // For performance, we can reduce constraints once applied
+	    // guessHistory still contains all the guesses made, so the 
+	    // knowledge is not lost!
+	    wordConstraints.clear();	
 
-	    // The guess as we keep building it up
-	    string base_guess = "";
-
-	    analytics->setState(GuessAnalytics::WORD1GUESS);
 	    //
-	    // Step 2. .Word 1:  
-	    //         .We know the length, get a subdirectory with all words 
-	    //          of that length
-	    //         .Make a guess, use it with the matcher
-	    //         .Reduce the dictionary to all words that match the guess
-	    //          in the same way as the passphrase matcher (by position)
-	    //         .Repeat till done
-	    // Improve the process by using a synthetic word for 1st guess
-	    //
+	    // Step 2. Create a subdictionary per word with the right size
+	    //         Use a synthetic word guess to reduce the sizes
+	    //         Use a word guess to further reduce the sizes
+	    //         Costs: 6 guesses
 
-	    // Find a sub dictionary with all words that have the right 
-	    // length!
-	    int count1, count2, count3;
-	    count1= 0; count2 = 0; count3 = 0;
-	    Dictionary *d1 = d0->getSubDictionary(space1);
-	    Dictionary *d2 = d0->getSubDictionary(space2 - space1 - 1);
-	    Dictionary *d3 = d0->getSubDictionary(phraseLength - space2 - 1);
-	    analytics->addDictSize(0, count1, d1->getWordCount());
-	    analytics->addDictSize(1, count2, d2->getWordCount());
-	    analytics->addDictSize(2, count3, d3->getWordCount());
-
+	    // Declarations for variables we will use in this section
 	    string prefix1; prefix1.append(1+space1, consts::zpc);
 	    string prefix2; prefix2.append(1+space2, consts::zpc);
 	    int pos, chars;
 	    string word, w;
 	    charCounts wordCounts;
 
-	    int wordsFound = 0;
-	    while (wordsFound < 2) {
-		wordsFound = 0;
+	    // Counters
+	    int count1, count2, count3;
+	    count1= 0; count2 = 0; count3 = 0;
+	    Dictionary *d1 = d0->getSubDictionary(space1);
+	    Dictionary *d2 = d0->getSubDictionary(space2 - space1 - 1);
+	    Dictionary *d3 = d0->getSubDictionary(phraseLength - space2 - 1);
+	    analytics->addDictSize(1, count1, d1->getWordCount());
+	    analytics->addDictSize(2, count2, d2->getWordCount());
+	    analytics->addDictSize(3, count3, d3->getWordCount());
+
+	    int testPhraseCounter = 0;
+	    for (int att=0; att<2; ++att) {
 		if (d1->getWordCount() > 1) {
 		    analytics->setState(GuessAnalytics::WORD1GUESS);
-		    word = d1->getGuessWord(count1++);
-		    p->match(word, pos, chars);
-		    guessHistory.push_back(
-			new GuessHistoryElement(word, pos, chars));
+		    count1++;
+		    word = d1->getGuessWord(att);	// synthetic guess word
+		    w = appendTestPhrase(word, testPhraseCounter++);
+		    p->match(w, pos, chars);
+		    guessHistory.push_back(new GuessHistoryElement(w, pos, chars));
 		    d1 = d1->getSubDictionary(word, pos);
 
 		    wordCounts.reset(); wordCounts.addToCount(word);
 		    dc = new CharMatchWordConstraint(wordCounts, chars);
 		    wordConstraints.push_back(dc);
-		} else {
-		    wordsFound++;
 		}
 
 		d2 = d2->getSubDictionary(wordConstraints);
 		if (d2->getWordCount() > 1) {
 		    analytics->setState(GuessAnalytics::WORD2GUESS);
-		    word = d2->getGuessWord(count2++);
+		    count2++;
+		    word = d2->getGuessWord(att);	// synthetic guess word
 		    w = prefix1; w.append(word);
+		    w = appendTestPhrase(w, testPhraseCounter++);
 		    p->match(w, pos, chars);
 		    guessHistory.push_back(new GuessHistoryElement(w, pos, chars));
 		    d2 = d2->getSubDictionary(word, pos);
@@ -131,16 +136,15 @@ class Mastermind {
 		    wordCounts.reset(); wordCounts.addToCount(word);
 		    dc = new CharMatchWordConstraint(wordCounts, chars);
 		    wordConstraints.push_back(dc);
-		} else {
-		    wordsFound++;
 		}
 
-#if 0
 		d3 = d3->getSubDictionary(wordConstraints);
-		if (d3->getWordCount() > 1) {
+		if ((d3->getWordCount() > 1) && (att == 0)) {
 		    analytics->setState(GuessAnalytics::WORD3GUESS);
-		    word = d3->getGuessWord(count3++);
+		    count3++;
+		    word = d3->getGuessWord(att);	// synthetic guess word
 		    w = prefix2; w.append(word);
+		    w = appendTestPhrase(w, testPhraseCounter++);
 		    p->match(w, pos, chars);
 		    guessHistory.push_back(new GuessHistoryElement(w, pos, chars));
 		    d3 = d3->getSubDictionary(word, pos);
@@ -148,72 +152,107 @@ class Mastermind {
 		    wordCounts.reset(); wordCounts.addToCount(word);
 		    dc = new CharMatchWordConstraint(wordCounts, chars);
 		    wordConstraints.push_back(dc);
-		} else {
-		    wordsFound++;
 		}
-#endif
+
 		d1 = d1->getSubDictionary(wordConstraints);
 		d2 = d2->getSubDictionary(wordConstraints);
 		d3 = d3->getSubDictionary(wordConstraints);
-		wordConstraints.clear();
-
-		analytics->addDictSize(0, count1, d1->getWordCount());
-		analytics->addDictSize(1, count2, d2->getWordCount());
-#if 0
-		analytics->addDictSize(2, count3, d3->getWordCount());
-#else
-		++count3;
-		analytics->addDictSize(2, count3, d3->getWordCount());
-#endif
+		analytics->addDictSize(1, count1, d1->getWordCount());
+		analytics->addDictSize(2, count2, d2->getWordCount());
+		analytics->addDictSize(3, count3, d3->getWordCount());
 	    }
-	    string word1 = d1->getGuessWord(1);
-	    string word2 = d2->getGuessWord(1);
+	    wordConstraints.clear();
 
-	    // Add the word and space to the guess
-	    base_guess.append(word1);
-	    base_guess.append(" ");
+	    Dictionary *phrases = new Dictionary();
 
-	    // Add the second word, and space to the guess
-	    base_guess.append(word2);
-	    base_guess.append(" ");
+	    //
+	    // Now we get to the creating the phrase dictionary
+	    //
+	    for (int i=0; i<d1->getWordCount(); ++i) {
+		string word1 = d1->getWord(i);
+		for (int j=0; j<d2->getWordCount(); ++j) {
+		    string word2 = d2->getWord(j);
+		    string guess;
+		    guess.append(word1);
+		    guess.append(1, consts::spc);
+		    guess.append(word2);
+		    guess.append(1, consts::spc);
+		    // Constrain the dictionary word 3
+		    wordConstraints = createDictConstraints(guess, guessHistory);
+		    Dictionary *d4 = d3->getSubDictionary(wordConstraints);
+		    for (int k=0; k<d4->getWordCount(); ++k) {
+			string word3 = d4->getWord(k);
+			string phrase; phrase.append(guess);
+			phrase.append(word3);
+			bool match = true;
+			for (int l=0; (match && l<guessHistory.size()); ++l) {
+			    GuessHistoryElement *g = guessHistory[l];
+			    if (g->phraseMatch(phrase) == false) {
+				match = false;
+				if (debug) {
+				    // TODO
+				}
+			    }
+			}
+			if (match)
+			    phrases->addWord(phrase);
+		    }
+		}
+	    }
 
-	    wordConstraints = createDictConstraints(base_guess, guessHistory);
+	    if (debug) {
+		cout << d1->getWordCount() << consts::eol;
+		cout << d2->getWordCount() << consts::eol;
+		cout << d3->getWordCount() << consts::eol;
+		cout << phrases->getWordCount() << consts::eol;
+	    }
 
-	    d3 = d3->getSubDictionary(wordConstraints);
-	    analytics->addDictSize(2, count3++, d3->getWordCount());
+	    //
+	    // Now for the real guesses
+	    //
 
-	    analytics->setState(GuessAnalytics::WORD3GUESS);
+	    analytics->setState(GuessAnalytics::PHRASEGUESS);
+	    Dictionary *orig_phrases = phrases;
+
 	    bool found = false;
-	    string word3;
-	    while ((found == false) && (d3->getWordCount() > 1)) {
-		    word3 = d3->getGuessWord(count3++);
-		string w = prefix2;
-		w.append(word3);
-		int pos, chars;
-		p->match(w, pos, chars);
+	    int count4 = 0;
+	    string phraseguess;
+	    while ((found == false) && (phrases->getWordCount() > 1)) {
+		analytics->addDictSize(4, count4, phrases->getWordCount());
+		phraseguess = phrases->getGuessWord(2);
+		count4++;
+		p->match(phraseguess, pos, chars);
 		guessHistory.push_back(new GuessHistoryElement(w, pos, chars));
-		if (pos == word3.length()) {
+		if (pos == phraseguess.length()) {
 		    found = true;
 		} else {
-		    d3 = d3->getSubDictionary(word3, pos);
+		    phrases = phrases->getSubDictionary(phraseguess, pos, chars);
 		}
-		analytics->addDictSize(2, count3, d3->getWordCount());
 	    }
 	    if (found == false) {
-		if (d3->getWordCount() == 1) {
-		    word3 = d3->getWord(0);
+		if (phrases->getWordCount() == 1) {
+		    phraseguess = phrases->getWord(0);
 		} else {
 		    assert(false);
 		}
 	    }
 
+	    orig_phrases->deleteEntries();
+
 	    // We are now done!
 
 	    guessHistory.clear();
 
-	    // Add the third word to the guess
-	    base_guess.append(word3);
-	    return base_guess;
+	    return phraseguess;
+	}
+
+	string appendTestPhrase(string word, int counter) {
+	    string rc = word;
+	    int l = rc.length();
+	    rc.append(phraseLength - l, consts::zpc);
+	    char testChar = dictFreq[1+counter];
+	    rc.append(phraseLength, testChar);
+	    return rc;
 	}
 
 	// Find the length of the phrase,and the count of the most frequent

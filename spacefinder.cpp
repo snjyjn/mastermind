@@ -17,6 +17,7 @@ SpaceFinder::SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, int maxWo
     this->minWordLen = minWordLen;
     this->maxWordLen = maxWordLen;
     this->maxPhraseLength = phraseLen;
+    dictFreq = d->getCharsByFrequency();
     debug = false;
 }
 
@@ -170,8 +171,7 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
     // characters - the character match count will be 2 + count(char)
     // When this is 0, we can reduce dictionary size for words 1 & 2
     // In any case, this should help word 3 significantly!
-    string dictFreq = d->getCharsByFrequency();  // Should be static?
-    int additionalInfoIndex = dictFreq.size() -1; // start from tail
+    int additionalTestCounter = 0;
     DictConstraints *rc = new DictConstraints();
 
     int targetContigLength = countUnknowns/2;
@@ -189,16 +189,7 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
 	phrase = buildTestString(targetContigLength, test_group, ignore_group);
 
 	// Additional Testing sneaked in here!
-	string testChars;
-	char additionalTestChar = dictFreq[additionalInfoIndex];
-	additionalInfoIndex--;
-	testChars.append(maxPhraseLength, additionalTestChar);
-	additionalTestChar = dictFreq[additionalInfoIndex];
-	additionalInfoIndex--;
-	testChars.append(maxPhraseLength, additionalTestChar);
-	additionalTestChar = dictFreq[additionalInfoIndex];
-	additionalInfoIndex--;
-	testChars.append(maxPhraseLength, additionalTestChar);
+	string testChars = appendTestPhrase(additionalTestCounter++);
 	charCounts testCounts;
 	testCounts.addToCount(testChars);
 
@@ -238,12 +229,7 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
 	phrase = buildTestString(test_group, ignore_group);
 
 	// Additional Testing sneaked in here!
-	string testChars;
-	char additionalTestChar = dictFreq[additionalInfoIndex];
-	additionalInfoIndex--;
-	testChars.append(maxPhraseLength, additionalTestChar);
-	additionalTestChar = dictFreq[additionalInfoIndex];
-	additionalInfoIndex--;
+	string testChars = appendTestPhrase(additionalTestCounter++);
 	phrase.append(testChars);
 
 	charCounts testCounts;
@@ -270,6 +256,36 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
     }
     getPair(space1, space2);
     return *rc;
+}
+
+string 
+SpaceFinder::appendTestPhrase(int counter) {
+    string rc = "";
+    string testChars;
+    switch(counter) {
+	case 0:
+	    testChars = dictFreq.substr(dictFreq.length()-4, 4);
+	    break;
+	case 1:
+	    testChars = dictFreq.substr(dictFreq.length()-7, 3);
+	    break;
+	case 2:
+	    testChars = dictFreq.substr(dictFreq.length()-9, 2);
+	    break;
+	case 3:
+	    testChars = dictFreq.substr(dictFreq.length()-11, 2);
+	    break;
+	case 4:
+	    testChars = dictFreq.substr(dictFreq.length()-12, 1);
+	    break;
+	default:
+	    testChars = dictFreq.substr(dictFreq.length()-(counter+8), 1);
+	    break;
+    }
+    for (int i=0; i<maxPhraseLength; ++i) {
+	rc.append(testChars);
+    }
+    return rc;
 }
 
 // Process the response from the matcher.

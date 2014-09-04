@@ -125,6 +125,8 @@ This I think is about the limit of of word based techniques.
 However, with phrase based techniques, we should be able to do much better.
 
 
+With Phrase based matching, we are down to 14531 attempts!  It is expensive
+in terms of compute!
 
 
 

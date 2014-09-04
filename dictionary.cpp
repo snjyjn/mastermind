@@ -29,6 +29,16 @@ Dictionary::initialize(string filename) {
     dict.close();
 }
 
+void
+Dictionary::deleteEntries() {
+    for (vector<DictionaryEntry *>::iterator it=entries->begin(); 
+         it!= entries->end(); ++it) {
+	DictionaryEntry *de = *it;
+	delete de;
+    }
+    entries->resize(0);
+}
+
 bool 
 Dictionary::isValid() const {
     for (int i=0; i<getWordCount(); ++i) {
@@ -224,9 +234,44 @@ Dictionary::getSubDictionary(string word, int positionMatches) const {
     return sub;
 }
 
+
+Dictionary *
+Dictionary::getSubDictionary(string word, int pos, int chars) const {
+    Dictionary *sub = new Dictionary();
+    DictionaryEntry *self = NULL;
+    int wlen = word.length();
+    charCounts cc; cc.addToCount(word);
+
+    for (vector<DictionaryEntry *>::iterator it=entries->begin(); 
+         it!= entries->end(); ++it) {
+	DictionaryEntry *de = (*it);
+	string entry_word = de->getWord();
+	if ((de->characterMatch(cc) == chars) &&
+	    (wlen == entry_word.length())) {
+	    int m = 0;
+	    for (int i=0; i<wlen; ++i) {
+		if (word[i] == entry_word[i]) {
+		    m++;
+		}
+	    }
+	    if (m == pos) {
+		if (word == entry_word) {
+		    self = de;
+		} else {
+		    sub->addEntry(de);
+		}
+	    }
+	}
+    }
+    if (sub->getWordCount() == 0) {
+	sub->addEntry(self);
+    }
+    return sub;
+}
+
 // Apply a collection of constraints to a dictionary to get a subdict.
 Dictionary *
-Dictionary::getSubDictionary(DictConstraints constr) const {
+Dictionary::getSubDictionary(DictConstraints constr, bool debugThisCall) const {
     Dictionary *sub = new Dictionary();
 
     // For each dictionary  entry
@@ -243,6 +288,9 @@ Dictionary::getSubDictionary(DictConstraints constr) const {
 	    // check the constraint
 	    if (false == dc->match(de)) {
 		flag = false;
+		if (debugThisCall) {
+		    dc->explain(de);
+		}
 	    }
 	}
 
@@ -301,7 +349,7 @@ DictionaryEntry::debugprint() const {
 }
 
 DictionaryEntry::~DictionaryEntry() {
-    assert(false);
+    // assert(false);
 }
 
 CharMatchConstraint::
@@ -316,6 +364,19 @@ CharMatchConstraint::match(DictionaryEntry *de) const {
     return (matchCount == charMatchCount);
 }
 
+void 
+CharMatchConstraint::explain(DictionaryEntry *de) const {
+    int matchCount = de->characterMatch(counts);
+    debugprint();
+    cout << "matched : " << matchCount << " with " << de->getWord() << consts::eol;
+}
+
+void 
+CharMatchConstraint::debugprint() const {
+    cout << "CharMatchConstraint : " << charMatchCount << " of ";
+    counts.debugprint();
+}
+
 CharMatchWordConstraint::
 CharMatchWordConstraint(charCounts candidateCounts, int matchCount) {
     counts = candidateCounts;
@@ -326,4 +387,17 @@ bool
 CharMatchWordConstraint::match(DictionaryEntry *de) const {
     int matchCount = de->characterMatch(counts);
     return (matchCount <= charMatchCount);
+}
+
+void 
+CharMatchWordConstraint::explain(DictionaryEntry *de) const {
+    int matchCount = de->characterMatch(counts);
+    debugprint();
+    cout << "matched : " << matchCount << " with " << de->getWord() << consts::eol;
+}
+
+void 
+CharMatchWordConstraint::debugprint() const {
+    cout << "CharMatchWordConstraint : " << charMatchCount << " of ";
+    counts.debugprint();
 }
