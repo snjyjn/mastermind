@@ -81,7 +81,8 @@ class GuessHistoryElement {
 
 	// Replicate the matcher in passphrase, so that candidates can 
 	// be compared with historical attempts
-	bool phraseMatch(const charCounts &candidateCounts, const string &candidate) const;
+	bool phraseMatch(const charCounts &candidateCounts, 
+	                 const string &candidate) const;
 
 	bool phraseMatch(const string &candidate) const;
 

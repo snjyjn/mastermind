@@ -125,9 +125,88 @@ This I think is about the limit of of word based techniques.
 However, with phrase based techniques, we should be able to do much better.
 
 
-With Phrase based matching, we are down to 14531 attempts!  It is expensive
-in terms of compute!
+With Phrase based matching, we are down to 11383 attempts!  It is expensive
+in terms of compute!  I also dont like the code structure!
 
+This is how I am doing it:
+1. Measure the length of the phrase - using a string with all 26 characters
+   max times (max = 3 * maxwordlen + 2) and 2 spaces.  First maxlen characters
+   are the most frequent in the dictionary i.e. e
+2. Use a binary sieve kind of strategy to identify the spaces - do a set number
+   of attempts, and identify potential pairs of spaces.
+   Create specific test strings to reduce to a single pair.
+3. In parallel, append 'crafted' test strings to get more information about 
+   the phrase.  The current strategy is as follows:
+   a. Use characters in order of their frequency in the dictionary.
+   b. We already know the count for the most frequent
+   c. 1st Test string = next 5 characters.  This gives us the count of these
+      characters in the phrase.
+   d. next 3 test strings = next 5 characters each, covering a total of 20 
+      characters in 4 attempts in addition to the first 1 char.
+      This gives us the count for these last 5 characters as well.
+      sets with 0 count are great for reducing the dictionary size!
+   e. Now for the previous test that had the least, non-zero counts, split the 
+      string into 2, and use 1 for testing.  The resulting count tells us about
+      the other split as well.
+   f. Now repeat tests with characters (0-based), 
+       1,6,11,16,21
+       2,7,12,17,22
+       3,8,13,18,23
+       4,9,14,19,24
+       This should give us 5,10,15,20,25
+    g. After this, the next set of test strings are all 1 character long.
+       though we dont expect to get so many tries!
+4. Once the spaces are identified, use the constraints so far (as many tests
+   as could be done in these attempts) to reduce the size of the dictionary.
+   Also create 3 sub dictionaries, 1 for each word.
+5. Now create a synthetic guess word for each dictionary, and test it.  
+   Use these results to reduce the individual dictionary sizes.  
+   Decorate this with test characters as well (after the length) to get more
+   constraints on the phrase!
+6. Do one more round of guessing for words 1, 2 and 3.  This brings the 
+   dictionary to a manageable size.  Perform a cross product, applying all 
+   constraints as before to create a phrase dictionary.
+7. Solve for the phrase dictionary through a series of guesses - this time
+   using both position and character match information.
+8. This approach brings us to under 13500 attempts:
+    Matcher Statistics
+    ------------------
+    Length : 1000
+    Spaces : 6375
+    Word 1 : 1996
+    Word 2 : 1995
+    Word 3 : 1992
+    Phrase : 132
+    TOTAL  : 13490
 
+    Dictionary Statistics
+    word 0	6517
+    word 1	780	221	91
+    word 2	791	232	92
+    word 3	774	232	95
+    word 4	2	2
 
+    Solution time: 4 minutes on my macbook pro.
+
+9. Going back to step 5 and 6 - if we solve word1 in 2 passes (1 synthetic)
+   word 2 in 1 pass (synthetic), and dont reduce dictionary for word3, we
+   get a computationally harder, but still tractable solution, which looks like:
+
+    Matcher Statistics
+    ------------------
+    Length : 1000
+    Spaces : 6375
+    Word 1 : 1996
+    Word 2 : 999
+    Phrase : 1013
+    TOTAL  : 11383
+
+    Dictionary Statistics
+    word 0	6517
+    word 1	780	221	92
+    word 2	791	233
+    word 3	772
+    word 4	186	20	4	2
+
+    Solution time: 20 minutes on my macbook pro.
 

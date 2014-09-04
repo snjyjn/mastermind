@@ -7,6 +7,7 @@
 #include "spacefinder.h"
 #include "passphrase.h"
 #include "dictionary.h"
+#include "mastermind.h"
 
 using namespace std;
 
@@ -72,6 +73,7 @@ SpaceFinder::initialize() {
     // 0 - minWordLen is out of bounds!
     for (int i=0; i<minWordLen; ++i) {
 	state[i] = -1;
+	state[maxPhraseLength-i-1] = -1;
     }
     // (2 * maxWordLen) + 2  to maxPhraseLength is also out of bounds
     // TODO: Test for off by 1
@@ -150,7 +152,9 @@ SpaceFinder::excludeSet(vector<int> &coll) {
 
 
 DictConstraints&
-SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
+SpaceFinder::findSpaces(GuessHistory &hist, 
+			TestPatternGenerator *tpg,
+			int &space1, int &space2) {
     // Setup the internal state to be clean based on all possible information
     initialize();
 
@@ -167,11 +171,8 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
     // Always have half as space, and half as invalid.  The number of contiguous
     // spaces halves in each iteration till we get to 1.
 
-    // Additional information strategy.  Append the string with low frequency
-    // characters - the character match count will be 2 + count(char)
-    // When this is 0, we can reduce dictionary size for words 1 & 2
-    // In any case, this should help word 3 significantly!
-    int additionalTestCounter = 0;
+    // Additional information strategy:  Move to TestPatternGenerator
+    int additionalTestCounter = 1;
     DictConstraints *rc = new DictConstraints();
 
     int targetContigLength = countUnknowns/2;
@@ -189,7 +190,8 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
 	phrase = buildTestString(targetContigLength, test_group, ignore_group);
 
 	// Additional Testing sneaked in here!
-	string testChars = appendTestPhrase(additionalTestCounter++);
+	string tc = tpg->getTestCombo(additionalTestCounter);
+	string testChars = appendTestPhrase(tc);
 	charCounts testCounts;
 	testCounts.addToCount(testChars);
 
@@ -203,6 +205,7 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
 	processMatchResponse(pos, test_group, ignore_group);
 
 	int additionalTestCharCount = chars - 2;
+	additionalTestCounter = tpg->setCharCount(additionalTestCounter, tc, additionalTestCharCount);
 
 	DictionaryConstraint *dc = new CharMatchWordConstraint(testCounts, additionalTestCharCount);
 	rc->push_back(dc);
@@ -229,7 +232,8 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
 	phrase = buildTestString(test_group, ignore_group);
 
 	// Additional Testing sneaked in here!
-	string testChars = appendTestPhrase(additionalTestCounter++);
+	string tc = tpg->getTestCombo(additionalTestCounter);
+	string testChars = appendTestPhrase(tc);
 	phrase.append(testChars);
 
 	charCounts testCounts;
@@ -243,6 +247,7 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
 	processMatchResponse(pos, test_group, ignore_group);
 
 	int additionalTestCharCount = chars - 2;
+	additionalTestCounter = tpg->setCharCount(additionalTestCounter, tc, additionalTestCharCount);
 	DictionaryConstraint *dc = new CharMatchWordConstraint(testCounts, additionalTestCharCount);
 	rc->push_back(dc);
 
@@ -255,33 +260,23 @@ SpaceFinder::findSpaces(GuessHistory &hist, int &space1, int &space2) {
 	}
     }
     getPair(space1, space2);
+    if (debug) {
+	tpg->debugprint();
+    }
+
+    DictConstraints tgpc = tpg->getWordConstraints();
+    for (DictConstraints::iterator dc_it=tgpc.begin(); 
+	 dc_it!= tgpc.end(); ++dc_it) {
+	DictionaryConstraint *dc = (*dc_it);
+	rc->push_back(dc);
+    }
+    // There is probably a lot of duplicate constraints in here!
     return *rc;
 }
 
 string 
-SpaceFinder::appendTestPhrase(int counter) {
-    string rc = "";
-    string testChars;
-    switch(counter) {
-	case 0:
-	    testChars = dictFreq.substr(dictFreq.length()-4, 4);
-	    break;
-	case 1:
-	    testChars = dictFreq.substr(dictFreq.length()-7, 3);
-	    break;
-	case 2:
-	    testChars = dictFreq.substr(dictFreq.length()-9, 2);
-	    break;
-	case 3:
-	    testChars = dictFreq.substr(dictFreq.length()-11, 2);
-	    break;
-	case 4:
-	    testChars = dictFreq.substr(dictFreq.length()-12, 1);
-	    break;
-	default:
-	    testChars = dictFreq.substr(dictFreq.length()-(counter+8), 1);
-	    break;
-    }
+SpaceFinder::appendTestPhrase(string testChars) {
+    string rc;
     for (int i=0; i<maxPhraseLength; ++i) {
 	rc.append(testChars);
     }
@@ -488,4 +483,152 @@ SpaceFinder::debugprint() const {
 	}
 	cout << consts::eol;
     }
+}
+
+TestPatternGenerator::TestPatternGenerator(Dictionary *d) {
+    this->d = d;
+    dictFreq = d->getCharsByFrequency();
+    phraseLen = 0;
+}
+
+void 
+TestPatternGenerator::setPhraseLength(int len) {
+    phraseLen = len;
+}
+
+void 
+TestPatternGenerator::debugprint() const {
+    for(vector<pair<string,int> >::const_iterator it = alphaCounts.cbegin(); 
+	it != alphaCounts.cend(); ++it) {
+	cout << it->first << consts::tab << it->second << consts::eol;
+    }
+}
+
+int 
+TestPatternGenerator::setCharCount(int counter, string combo, int count) {
+    counter++;
+    alphaCounts.push_back(make_pair(combo, count));
+    switch(counter) {
+	case 5: 	// we can deduce combo 5
+	    {
+		combo = getTestCombo(counter);
+		int total = 0;
+		for(vector<pair<string,int> >::iterator it = alphaCounts.begin(); 
+		    it != alphaCounts.end(); ++it) {
+		    total += it->second;
+		}
+		alphaCounts.push_back(make_pair(combo, phraseLen - total));
+		counter++;
+	    }
+	    break;
+	case 7: 	// we can deduce combo 7
+	    {
+		combo = getTestCombo(counter);
+		alphaCounts.push_back(make_pair(combo, testLength - count));
+		counter++;
+	    }
+	    break;
+    }
+    return counter;
+}
+
+string 
+TestPatternGenerator::getNextTestCombo() {
+    return getTestCombo(++lastCounter);
+}
+
+string 
+TestPatternGenerator::getTestCombo(int counter) {
+    assert(phraseLen > 0);
+    lastCounter = counter;
+    string rc;
+    switch(counter) {
+	case 0:
+	    assert(false);
+	case 1:
+	    return dictFreq.substr(1, 5);
+	case 2:
+	    return dictFreq.substr(6, 5);
+	case 3:
+	    return dictFreq.substr(11, 5);
+	case 4:
+	    return dictFreq.substr(16, 5);
+	case 5:
+	    return dictFreq.substr(21, 5);
+	case 6:
+	    {
+		int minLen = phraseLen;
+		string minCombo;
+		for(vector<pair<string,int> >::iterator it = alphaCounts.begin(); 
+		    it != alphaCounts.end(); ++it) {
+		    if ((it->second > 0) && (minLen > it->second) && 
+			(it->first.length() > 1)) {
+			minLen = it->second;
+			minCombo = it->first;
+		    }
+		}
+		assert(minLen < phraseLen);
+		// Store this info in state to use in next call!
+		comboToDivide = minCombo; testLength=minLen;
+		return comboToDivide.substr(0, (minCombo.length()/2));
+	    }
+	case 7:
+	    return comboToDivide.substr(comboToDivide.length()/2, 
+	                               comboToDivide.length());
+	case 8:
+	    rc.append(dictFreq.substr(5,1))
+	      .append(dictFreq.substr(10,1))
+	      .append(dictFreq.substr(15,1))
+	      .append(dictFreq.substr(20,1))
+	      .append(dictFreq.substr(25,1));
+	    return rc;
+	case 9:
+	    rc.append(dictFreq.substr(4,1))
+	      .append(dictFreq.substr(9,1))
+	      .append(dictFreq.substr(14,1))
+	      .append(dictFreq.substr(19,1))
+	      .append(dictFreq.substr(24,1));
+	    return rc;
+	case 10:
+	    rc.append(dictFreq.substr(3,1))
+	      .append(dictFreq.substr(8,1))
+	      .append(dictFreq.substr(13,1))
+	      .append(dictFreq.substr(18,1))
+	      .append(dictFreq.substr(23,1));
+	    return rc;
+	case 11:
+	    rc.append(dictFreq.substr(2,1))
+	      .append(dictFreq.substr(7,1))
+	      .append(dictFreq.substr(12,1))
+	      .append(dictFreq.substr(17,1))
+	      .append(dictFreq.substr(22,1));
+	    return rc;
+	case 12: rc = dictFreq.substr(1,1); return rc;
+	case 13: rc = dictFreq.substr(6,1); return rc;
+	case 14: rc = dictFreq.substr(11,1); return rc;
+	case 15: rc = dictFreq.substr(16,1); return rc;
+	case 16: rc = dictFreq.substr(21,1); return rc;
+	default:
+	    return rc;
+    }
+    return rc;
+}
+
+DictConstraints&
+TestPatternGenerator::getWordConstraints() const {
+    DictConstraints *rc = new DictConstraints();
+    for(vector<pair<string,int> >::const_iterator it = alphaCounts.cbegin(); 
+	it != alphaCounts.cend(); ++it) {
+	int matchCount = it->second;
+	string chars = it->first;
+	string temp;
+	for (int i=0; i<matchCount; ++i) {
+	    temp.append(chars);
+	}
+	charCounts counts;
+	counts.addToCount(temp);
+	DictionaryConstraint *dc = new CharMatchWordConstraint(counts, matchCount);
+	rc->push_back(dc);
+    }
+    return *rc;
 }

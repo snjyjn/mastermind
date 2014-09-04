@@ -11,6 +11,44 @@
 
 using namespace std;
 
+class TestPatternGenerator {
+    public:
+	TestPatternGenerator(Dictionary *d);
+
+	// Get a test pattern, to be used when there are no other alpha 
+	// chars in the test string.  
+	// id 0: Returns a string with all 26 alphabets, repeated max times
+	//       with the first max characters being the most frequent char
+	// This returns the size of the phrase.
+	// id 1-4: return a string with low freqeuncy character combinations,
+	//       which can be used to reduce the dictionary size.
+	const string& getPattern(int id);
+
+	// Set the phrase length.  This includes the 2 spaces as well!
+	void setPhraseLength(int len);
+
+        int setCharCount(int counter, string combo, int count);
+	string getTestCombo(int counter);
+	string getNextTestCombo();
+
+	DictConstraints& getWordConstraints() const;
+
+	void debugprint() const;
+    private:
+	Dictionary *d;
+	string dictFreq;
+	int phraseLen;		// phrase length, including spaces
+
+	// State
+	// Keep a track of all testing done so far
+	vector<pair<string, int> > alphaCounts;
+
+	// Temporary state between calls to getTestCombo
+	string comboToDivide; int testLength;
+
+	int lastCounter;   // Used for nextCombo!
+};
+
 /*
  * Space Finder:
  * The class uses the passphrase matcher to identify spaces in there.
@@ -25,7 +63,9 @@ class SpaceFinder {
 	            int maxWordLen, int phraseLen);
 
 	// The main entry point to this class
-	DictConstraints& findSpaces(GuessHistory &hist, int &space1, int &space2);
+	DictConstraints& findSpaces(GuessHistory &hist, 
+				    TestPatternGenerator *tpg,
+	                            int &space1, int &space2);
 
 	void debugprint() const;
 
@@ -34,7 +74,7 @@ class SpaceFinder {
 	string buildDebugString() const;
 
 	// Append a test phrase (additional) for low frequency characters
-	string appendTestPhrase(int counter);
+	string appendTestPhrase(string testChars);
 
 	// Build a string to test for spaces.  Test only unknown positions
 	// Half of which should be in test group, and hald in ignore.
@@ -86,22 +126,5 @@ class SpaceFinder {
 // For each pair of positions, (i,j), where i < j, if i and j can be the 2
 // positions for spaces, possible[i][j] = 1, else it is 0
 	int **possible;
-};
-
-class TestPatternGenerator {
-public:
-    TestPatternGenerator(Dictionary *d);
-
-    // Get a test pattern, to be used when there are no other alpha 
-    // chars in the test string.  
-    // id 0: Returns a string with all 26 alphabets, repeated max times
-    //       with the first max characters being the most frequent char
-    // This returns the size of the phrase.
-    // id 1-4: return a string with low freqeuncy character combinations,
-    //       which can be used to reduce the dictionary size.
-    const string& getPattern(int id);
-
-private:
-
 };
 #endif
