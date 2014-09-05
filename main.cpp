@@ -33,6 +33,8 @@ int main (int argc, char **argv)
 	PassPhrase *secret = new PassPhrase(phrase);
 	string guess = m->guess(secret);
 	cout << guess << consts::eol;
+	delete secret;
     }
     analytics->printAnalysis();
+    delete m;
 }

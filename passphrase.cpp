@@ -20,6 +20,9 @@ PassPhrase::PassPhrase(const string phrase) {
    counts.addToCount(phrase);
 }
 
+PassPhrase::~PassPhrase() {
+}
+
 void
 PassPhrase::debugprint() const {
    cout << phrase << consts::eol;

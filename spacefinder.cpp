@@ -22,6 +22,9 @@ SpaceFinder::SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, int maxWo
     debug = false;
 }
 
+SpaceFinder::~SpaceFinder() {
+}
+
 // Initialize the space finder - prior to searching for spaces.
 // Allows the same instance to be used for multiple searches - not that we 
 // are doing it!
@@ -488,12 +491,16 @@ SpaceFinder::debugprint() const {
 TestPatternGenerator::TestPatternGenerator(Dictionary *d) {
     this->d = d;
     dictFreq = d->getCharsByFrequency();
+    assert(dictFreq.length() == 26);	// Fails later anyway
     phraseLen = 0;
 }
 
 void 
 TestPatternGenerator::setPhraseLength(int len) {
     phraseLen = len;
+}
+
+TestPatternGenerator::~TestPatternGenerator() {
 }
 
 void 

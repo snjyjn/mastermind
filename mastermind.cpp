@@ -26,6 +26,9 @@ Mastermind::Mastermind(Dictionary *d) {
 	cout << dictFreq;
 }
 
+Mastermind::~Mastermind() {
+}
+
 // The main solver method.  Given a passphrase matcher, solve
 // and return the solution.
 string 
@@ -37,7 +40,7 @@ Mastermind::guess(PassPhrase *p) {
     // TODO: Explore the possibility of doing that, and of 
     // introducing extra text in there to get more information
 
-    vector<GuessHistoryElement *> guessHistory;
+    GuessHistory guessHistory;
 
     // Setup a collection of constraints that we will want to apply
     // to individual words / sub phrases
@@ -75,6 +78,8 @@ Mastermind::guess(PassPhrase *p) {
 	= new CharMatchWordConstraint(firstCount, firstCharCount);
     wordConstraints.push_back(dc);
 
+    delete sf; sf = NULL;
+
     // Reduce the dictionary based on the extra information 
     // obtained while finding the spaces!
     Dictionary *d0 = dict->getSubDictionary(wordConstraints);
@@ -83,7 +88,7 @@ Mastermind::guess(PassPhrase *p) {
     // For performance, we can reduce constraints once applied
     // guessHistory still contains all the guesses made, so the 
     // knowledge is not lost!
-    wordConstraints.clear();	
+    DictUtils::clearDictConstraints(wordConstraints);
 
     //
     // Step 2. Create a subdictionary per word with the right size
@@ -117,14 +122,20 @@ Mastermind::guess(PassPhrase *p) {
 	    w = appendTestPhrase(word, tpg);
 	    p->match(w, pos, chars);
 	    guessHistory.push_back(new GuessHistoryElement(w, pos, chars));
-	    d1 = d1->getSubDictionary(word, pos);
+	    {
+		Dictionary *tmp = d1->getSubDictionary(word, pos);
+		delete d1; d1 = tmp;
+	    }
 
 	    wordCounts.reset(); wordCounts.addToCount(word);
 	    dc = new CharMatchWordConstraint(wordCounts, chars);
 	    wordConstraints.push_back(dc);
 	}
 
-	d2 = d2->getSubDictionary(wordConstraints);
+	{
+	    Dictionary *tmp = d2->getSubDictionary(wordConstraints);
+	    delete d2; d2 = tmp;
+	}
 	if ((d2->getWordCount() > 1) && (att == 0)) {
 	    analytics->setState(GuessAnalytics::WORD2GUESS);
 	    count2++;
@@ -133,7 +144,10 @@ Mastermind::guess(PassPhrase *p) {
 	    w = appendTestPhrase(w, tpg);
 	    p->match(w, pos, chars);
 	    guessHistory.push_back(new GuessHistoryElement(w, pos, chars));
-	    d2 = d2->getSubDictionary(word, pos);
+	    {
+		Dictionary *tmp = d2->getSubDictionary(word, pos);
+		delete d2; d2 = tmp;
+	    }
 
 	    wordCounts.reset(); wordCounts.addToCount(word);
 	    dc = new CharMatchWordConstraint(wordCounts, chars);
@@ -141,7 +155,10 @@ Mastermind::guess(PassPhrase *p) {
 	}
 
 #if 0
-	d3 = d3->getSubDictionary(wordConstraints);
+	{
+	    Dictionary *tmp = d3->getSubDictionary(wordConstraints);
+	    delete d3; d3 = tmp;
+	}
 	if ((d3->getWordCount() > 1) && (att == 0)) {
 	    analytics->setState(GuessAnalytics::WORD3GUESS);
 	    count3++;
@@ -158,16 +175,25 @@ Mastermind::guess(PassPhrase *p) {
 	}
 #endif
 
-	d1 = d1->getSubDictionary(wordConstraints);
-	d2 = d2->getSubDictionary(wordConstraints);
-	d3 = d3->getSubDictionary(wordConstraints);
+	{
+	    Dictionary *tmp;
+	    tmp = d1->getSubDictionary(wordConstraints);
+	    delete d1; d1 = tmp;
+
+	    tmp = d2->getSubDictionary(wordConstraints);
+	    delete d2; d2 = tmp;
+
+	    tmp = d3->getSubDictionary(wordConstraints);
+	    delete d3; d3 = tmp;
+	}
+
 	analytics->addDictSize(1, count1, d1->getWordCount());
 	analytics->addDictSize(2, count2, d2->getWordCount());
 	analytics->addDictSize(3, count3, d3->getWordCount());
     }
-    wordConstraints.clear();
+    DictUtils::clearDictConstraints(wordConstraints);
 
-    Dictionary *phrases = new Dictionary();
+    Dictionary *phraseDictionary = new Dictionary();
 
     //
     // Now we get to the creating the phrase dictionary
@@ -182,8 +208,10 @@ Mastermind::guess(PassPhrase *p) {
 	    guess.append(word2);
 	    guess.append(1, consts::spc);
 	    // Constrain the dictionary word 3
-	    wordConstraints = createDictConstraints(guess, guessHistory);
-	    Dictionary *d4 = d3->getSubDictionary(wordConstraints);
+	    DictConstraints *constr = createDictConstraints(guess, guessHistory);
+	    Dictionary *d4 = d3->getSubDictionary(*constr);
+	    DictUtils::clearDictConstraints(*constr);
+	    delete constr;
 	    for (int k=0; k<d4->getWordCount(); ++k) {
 		string word3 = d4->getWord(k);
 		string phrase; phrase.append(guess);
@@ -199,8 +227,9 @@ Mastermind::guess(PassPhrase *p) {
 		    }
 		}
 		if (match)
-		    phrases->addWord(phrase);
+		    phraseDictionary->addWord(phrase);
 	    }
+	    delete d4;
 	}
     }
 
@@ -208,7 +237,7 @@ Mastermind::guess(PassPhrase *p) {
 	cout << d1->getWordCount() << consts::eol;
 	cout << d2->getWordCount() << consts::eol;
 	cout << d3->getWordCount() << consts::eol;
-	cout << phrases->getWordCount() << consts::eol;
+	cout << phraseDictionary->getWordCount() << consts::eol;
     }
 
     //
@@ -216,7 +245,7 @@ Mastermind::guess(PassPhrase *p) {
     //
 
     analytics->setState(GuessAnalytics::PHRASEGUESS);
-    Dictionary *orig_phrases = phrases;
+    Dictionary *phrases = phraseDictionary->getSubDictionary(phraseLength);
 
     bool found = false;
     int count4 = 0;
@@ -235,7 +264,10 @@ Mastermind::guess(PassPhrase *p) {
 	if (pos == phraseguess.length()) {
 	    found = true;
 	} else {
-	    phrases = phrases->getSubDictionary(phraseguess, pos, chars);
+	    Dictionary *tmp;
+	    tmp = phrases->getSubDictionary(phraseguess, pos, chars);
+	    delete phrases;
+	    phrases = tmp;
 	}
     }
     if (found == false) {
@@ -246,11 +278,16 @@ Mastermind::guess(PassPhrase *p) {
 	}
     }
 
-    orig_phrases->deleteEntries();
+    // We are now done!  Cleanup!
+    delete d0;
+    delete d1;
+    delete d2;
+    delete d3;
+    delete phrases;
+    delete phraseDictionary;
+    delete tpg;
 
-    // We are now done!
-
-    guessHistory.clear();
+    utils::clearGuessHistory(guessHistory);
 
     return phraseguess;
 }
@@ -277,7 +314,7 @@ Mastermind::appendTestPhrase(string word, TestPatternGenerator *tpg) {
 // and character matches = length of string
 // Thanks to Roy for this wonderful idea!
 void 
-Mastermind::findPhraseLength(vector<GuessHistoryElement *> &guessHistory,
+Mastermind::findPhraseLength(GuessHistory &guessHistory,
     TestPatternGenerator *tpg) {
     string lengthTestString;
 
@@ -305,9 +342,11 @@ Mastermind::findPhraseLength(vector<GuessHistoryElement *> &guessHistory,
 // 2 words to constrain the dictionary.
 // See details in the comments in the code!
 // Build a vector of constraints, to be applied.
-DictConstraints&
+DictConstraints *
 Mastermind::createDictConstraints(const string &base_guess, 
-		      const vector<GuessHistoryElement *>& hist) {
+		      const GuessHistory& hist) {
+    // TODO: Should be const??
+
     DictConstraints *rc = new DictConstraints();
 
     // Get char counts for the now known information (words 1 and 2)
@@ -315,7 +354,7 @@ Mastermind::createDictConstraints(const string &base_guess,
     base_counts.addToCount(base_guess);
 
     // For each previous guess
-    for (vector<GuessHistoryElement *>::const_iterator it = hist.cbegin();
+    for (GuessHistory::const_iterator it = hist.cbegin();
 	it != hist.cend(); ++it) {
 	GuessHistoryElement *g = (*it);
 
@@ -381,5 +420,5 @@ Mastermind::createDictConstraints(const string &base_guess,
 	}
     }
 
-    return (*rc);
+    return rc;
 }

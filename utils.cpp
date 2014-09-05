@@ -30,6 +30,9 @@ charCounts::charCounts(const charCounts &c) {
     }
 }
 
+charCounts::~charCounts() {
+}
+
 int &
 charCounts::operator[](int i) {
     assert(i<charArraySize);
@@ -132,11 +135,24 @@ utils::ctoi(char c) {
     }
 }
 
+void
+utils::clearGuessHistory(GuessHistory& gh) {
+    while (!gh.empty()) {
+	GuessHistoryElement *e = gh.back();
+	gh.pop_back();
+	delete e;
+    }
+    gh.resize(0);
+}
+
 GuessHistoryElement::GuessHistoryElement(const string word, int pos, int chars) {
     this->word = word;
     this->pos = pos;
     this->chars = chars;
     counts.addToCount(word);
+}
+
+GuessHistoryElement::~GuessHistoryElement() {
 }
 
 bool 

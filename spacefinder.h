@@ -15,6 +15,8 @@ class TestPatternGenerator {
     public:
 	TestPatternGenerator(Dictionary *d);
 
+	~TestPatternGenerator();
+
 	// Get a test pattern, to be used when there are no other alpha 
 	// chars in the test string.  
 	// id 0: Returns a string with all 26 alphabets, repeated max times
@@ -61,6 +63,8 @@ class SpaceFinder {
 	// Constructor
 	SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, 
 	            int maxWordLen, int phraseLen);
+
+	~SpaceFinder();
 
 	// The main entry point to this class
 	DictConstraints& findSpaces(GuessHistory &hist, 

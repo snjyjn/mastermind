@@ -21,6 +21,8 @@ class Mastermind {
 	// so that it can get some basic stats from there.
 	Mastermind(Dictionary *d);
 
+	~Mastermind();
+
 	// The main solver method.  Given a passphrase matcher, solve
 	// and return the solution.
 	string guess(PassPhrase *p);
@@ -36,16 +38,15 @@ class Mastermind {
 	// The matcher will respond with position matches = count of most freq
 	// and character matches = length of string
 	// Thanks to Roy for this wonderful idea!
-	void findPhraseLength(vector<GuessHistoryElement *> &guessHistory,
-	    TestPatternGenerator *tpg);
+	void findPhraseLength(GuessHistory &guessHistory,
+	                      TestPatternGenerator *tpg);
 
 	// Use guess history, and known information so far from the first
 	// 2 words to constrain the dictionary.
 	// See details in the comments in the code!
 	// Build a vector of constraints, to be applied.
-	DictConstraints&
-	createDictConstraints(const string &base_guess, 
-			      const vector<GuessHistoryElement *>& hist);
+	DictConstraints * createDictConstraints(const string &base_guess, 
+			                        const GuessHistory& hist);
 
     private:
 	Dictionary *dict;

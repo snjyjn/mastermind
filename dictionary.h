@@ -43,8 +43,9 @@ class DictionaryEntry {
 
 	// Allow the dictionary class to access all state, etc.
 	friend class Dictionary;
+
     private:
-	// Destructor - should not be called till the end of the process
+	// Called explicitly from a dictionary that knows what to delete.
 	~DictionaryEntry();
 
 	string word;		// The actual word
@@ -55,19 +56,24 @@ class DictionaryEntry {
 	int uniqChars;		// number of unique characters in the word
 };
 
-
 // A DictionaryConstraint is an abstract base class, which contains a 
 // mechanism to constrain a dictionary and hence create a subdictionary.
 // The class contains a method to match with a DictionaryEntry, and return
 // true if the entry is a match, and false if not.
 class DictionaryConstraint {
     public:
+	virtual ~DictionaryConstraint();
 	virtual bool match(DictionaryEntry *de) const = 0;
 	virtual void explain(DictionaryEntry *de) const = 0;
 	virtual void debugprint() const = 0;
 };
 
 typedef vector<DictionaryConstraint *> DictConstraints;
+
+class DictUtils {
+    public:
+	static void clearDictConstraints(DictConstraints &constraints);
+};
 
 // A DictionaryConstraint that performs a match on character counts
 // This is designed for the entire phrase match, or the last word
@@ -76,6 +82,8 @@ typedef vector<DictionaryConstraint *> DictConstraints;
 class CharMatchConstraint : public DictionaryConstraint {
     public:
 	CharMatchConstraint(charCounts counts, int matchCount);
+	virtual ~CharMatchConstraint();
+
 	virtual bool match(DictionaryEntry *de) const;
 	virtual void explain(DictionaryEntry *de) const;
 	virtual void debugprint() const;
@@ -95,6 +103,8 @@ class CharMatchConstraint : public DictionaryConstraint {
 class CharMatchWordConstraint : public DictionaryConstraint {
     public:
 	CharMatchWordConstraint(charCounts counts, int matchCount);
+	virtual ~CharMatchWordConstraint();
+
 	virtual bool match(DictionaryEntry *de) const;
 	virtual void explain(DictionaryEntry *de) const;
 	virtual void debugprint() const;
@@ -109,13 +119,10 @@ class Dictionary {
     public:
 	Dictionary();
 
+	~Dictionary();
+
 	// Read the dictionary from the file, 1 word per line
 	void initialize(string filename);
-
-	// For memory manangement, dictionary needs to delete the 
-	// entries.  Since we are wily-nily creataing subdirectories which 
-	// point to the same entry, this has to be used ultra carefully
-	void deleteEntries();
 
 	// Return the i'th word in the dictionary.
 	// Would have been better to implement an iterator
@@ -162,13 +169,21 @@ class Dictionary {
 	Dictionary * getSubDictionary(string word, int pos, int chars) const;
 
 	// Apply a collection of constraints and get a smaller subdictionary
-	Dictionary *getSubDictionary(DictConstraints constr, bool debugThisCall = false) const;
+	Dictionary *getSubDictionary(const DictConstraints &constr, 
+	                             bool debugThisCall = false) const;
 
+	// Add a word to a dictionary
 	void addWord(string word);
 
     private:
 	// A valid word contains only lower case alphabets [a-z]
 	static bool validateWord(string word);
+
+	// For memory manangement, dictionary needs to delete the 
+	// entries.  Since we are creataing subdictionaries which 
+	// result in copying of references, this is done carefully
+	// This method will be called only from the destructor
+	void deleteEntries();
 
 	bool debug;
 
@@ -176,6 +191,11 @@ class Dictionary {
 
 	// The actual collection of entries
 	vector<DictionaryEntry *> *entries;
+
+	// Dictionary Entries alloted by this dictionary
+	// These are not copied to sub dictionaries, etc., and will be deleted
+	// when this dictionary is deleted.
+	vector<DictionaryEntry *> *allotted;
 
 	// Derived metrics / ...
 	int maxWordLength;

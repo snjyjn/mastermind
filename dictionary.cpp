@@ -11,10 +11,15 @@ using namespace std;
 // Constructor
 Dictionary::Dictionary() {
     entries = new vector<DictionaryEntry *>;
+    allotted = new vector<DictionaryEntry *>;
     maxWordLength = 0;
     minWordLength = 0;
     maxUniqChars = 0;
     debug = false;
+}
+
+Dictionary::~Dictionary() {
+    deleteEntries();
 }
 
 void
@@ -31,9 +36,9 @@ Dictionary::initialize(string filename) {
 
 void
 Dictionary::deleteEntries() {
-    for (vector<DictionaryEntry *>::iterator it=entries->begin(); 
-         it!= entries->end(); ++it) {
-	DictionaryEntry *de = *it;
+    while (!allotted->empty()) {
+	DictionaryEntry *de = allotted->back();
+	allotted->pop_back();
 	delete de;
     }
     entries->resize(0);
@@ -63,6 +68,7 @@ void
 Dictionary::addWord(string word) {
     DictionaryEntry *e = new DictionaryEntry(word);
     addEntry(e);
+    allotted->push_back(e);
 }
 
 void
@@ -198,11 +204,12 @@ Dictionary *
 Dictionary::getSubDictionary(int size) {
     Dictionary *sub = new Dictionary();
     for (vector<DictionaryEntry *>::iterator it=entries->begin(); 
-         it!= entries->end(); ++it)
+         it!= entries->end(); ++it) {
 	if ((*it)->length() == size) {
 	    DictionaryEntry *e = (*it);
 	    sub->addEntry(e);
 	}
+    }
     return sub;
 }
 
@@ -271,7 +278,8 @@ Dictionary::getSubDictionary(string word, int pos, int chars) const {
 
 // Apply a collection of constraints to a dictionary to get a subdict.
 Dictionary *
-Dictionary::getSubDictionary(DictConstraints constr, bool debugThisCall) const {
+Dictionary::getSubDictionary(const DictConstraints &constr, 
+                             bool debugThisCall) const {
     Dictionary *sub = new Dictionary();
 
     // For each dictionary  entry
@@ -281,9 +289,9 @@ Dictionary::getSubDictionary(DictConstraints constr, bool debugThisCall) const {
 
 	// for each constraint specified
 	bool flag = true;
-	for (DictConstraints::iterator dc_it=constr.begin(); 
-	     (dc_it!= constr.end() && (flag == true)); ++dc_it) {
-	    DictionaryConstraint *dc = (*dc_it);
+	for (DictConstraints::const_iterator dc_it=constr.cbegin(); 
+	     (dc_it!= constr.cend() && (flag == true)); ++dc_it) {
+	    const DictionaryConstraint *dc = (*dc_it);
 
 	    // check the constraint
 	    if (false == dc->match(de)) {
@@ -307,6 +315,9 @@ DictionaryEntry::DictionaryEntry(string word) {
     this->len = word.length();
     freq.addToCount(word);
     uniqChars = freq.uniqCounts();
+}
+
+DictionaryEntry::~DictionaryEntry() {
 }
 
 int 
@@ -348,14 +359,26 @@ DictionaryEntry::debugprint() const {
     cout << word << consts::eol;
 }
 
-DictionaryEntry::~DictionaryEntry() {
-    // assert(false);
+void
+DictUtils::clearDictConstraints(DictConstraints& constraints) {
+    while (!constraints.empty()) {
+	DictionaryConstraint *dc = constraints.back();
+	constraints.pop_back();
+	delete dc;
+    }
+    constraints.resize(0);
+}
+
+DictionaryConstraint::~DictionaryConstraint() {
 }
 
 CharMatchConstraint::
 CharMatchConstraint(charCounts candidateCounts, int matchCount) {
     counts = candidateCounts;
     charMatchCount = matchCount;
+}
+
+CharMatchConstraint::~CharMatchConstraint() {
 }
 
 bool 
@@ -381,6 +404,9 @@ CharMatchWordConstraint::
 CharMatchWordConstraint(charCounts candidateCounts, int matchCount) {
     counts = candidateCounts;
     charMatchCount = matchCount;
+}
+
+CharMatchWordConstraint::~CharMatchWordConstraint() {
 }
 
 bool 

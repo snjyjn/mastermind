@@ -8,12 +8,15 @@ using namespace std;
 
 // Common typedefs
 typedef int *pInt;
+class GuessHistoryElement;
+typedef vector<GuessHistoryElement *>  GuessHistory;
 
 // Basic utility functions to be used throughout the program
 class utils {
     public:
 	static char itoc(int i);
 	static int ctoi(char c);
+	static void clearGuessHistory(GuessHistory &gh);
 };
 
 // Basic constants to be used throughout the program
@@ -46,6 +49,8 @@ class charCounts {
 	// Copy Constructor
 	charCounts(const charCounts &c);
 
+	~charCounts();
+
 	// Access operators - make this behave more like an Array
 	int &operator[](int i);
 	const int &operator[](int i) const;
@@ -75,6 +80,8 @@ class GuessHistoryElement {
     public:
 	GuessHistoryElement(const string word, int pos, int chars);
 
+	~GuessHistoryElement();
+
 	string word;		// The word sent to the matcher
 	int pos;		// The number of positions that matched
 	int chars;		// The number of characters that matched
@@ -96,7 +103,6 @@ class GuessHistoryElement {
 	charCounts counts;
 };
 
-typedef vector<GuessHistoryElement *>  GuessHistory;
 
 // For analysis purposes:
 class GuessAnalytics {

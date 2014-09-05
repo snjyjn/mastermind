@@ -39,6 +39,8 @@ int main (int argc, char **argv)
 	    cout << "Testing :" << phrase << consts::eol;
 	    cout << "Guessed :" << guess << consts::eol;
 	}
+	delete secret;
     }
     analytics->printAnalysis();
+    delete m;
 }

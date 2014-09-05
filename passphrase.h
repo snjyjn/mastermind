@@ -16,6 +16,8 @@ class PassPhrase {
 	// Constructor, create the phrase, and initialize data structures
 	PassPhrase(const string phrase);
 
+	~PassPhrase();
+
 	// match the phrase with a candidate.
 	// Return true if it is a complete match
 	// Return false otherwise
