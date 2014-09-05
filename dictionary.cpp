@@ -20,6 +20,10 @@ Dictionary::Dictionary() {
 
 Dictionary::~Dictionary() {
     deleteEntries();
+    entries->resize(0);
+    allotted->resize(0);
+    delete entries;
+    delete allotted;
 }
 
 void

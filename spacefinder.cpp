@@ -20,9 +20,18 @@ SpaceFinder::SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, int maxWo
     this->maxPhraseLength = phraseLen;
     dictFreq = d->getCharsByFrequency();
     debug = false;
+    state = NULL;
+    possible = NULL;
 }
 
 SpaceFinder::~SpaceFinder() {
+    if (possible != NULL) {
+	for (int i=0; i<maxPhraseLength; ++i) {
+	    delete possible[i];
+	}
+    }
+    delete possible;
+    delete state;
 }
 
 // Initialize the space finder - prior to searching for spaces.

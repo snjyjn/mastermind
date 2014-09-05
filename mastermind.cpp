@@ -114,7 +114,7 @@ Mastermind::guess(PassPhrase *p) {
     analytics->addDictSize(3, count3, d3->getWordCount());
 
     int testPhraseCounter = 0;
-    for (int att=0; att<2; ++att) {
+    for (int att=0; att<1; ++att) {
 	if (d1->getWordCount() > 1) {
 	    analytics->setState(GuessAnalytics::WORD1GUESS);
 	    count1++;
