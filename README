@@ -1,4 +1,4 @@
-
+(This readme is more like a log of changes made to solve the probem!)
 0. Problem from:
 http://codegolf.stackexchange.com/questions/36921/mastermind-horse-battery-staple
 Given a dictionary (lower case alpha only), and a collection of pass phrases 
@@ -124,7 +124,6 @@ This I think is about the limit of of word based techniques.
 
 However, with phrase based techniques, we should be able to do much better.
 
-
 With Phrase based matching, we are down to 11383 attempts!  It is expensive
 in terms of compute!  I also dont like the code structure!
 
@@ -184,11 +183,12 @@ This is how I am doing it:
     word 1	780	221	91
     word 2	791	232	92
     word 3	774	232	95
-    word 4	2	2
+    phrase	2	2
 
     Solution time: 4 minutes on my macbook pro.
 
-9. Going back to step 5 and 6 - if we solve word1 in 2 passes (1 synthetic)
+VARIANTS
+.  Going back to step 5 and 6 - if we solve word1 in 2 passes (1 synthetic)
    word 2 in 1 pass (synthetic), and dont reduce dictionary for word3, we
    get a computationally harder, but still tractable solution, which looks like:
 
@@ -206,7 +206,74 @@ This is how I am doing it:
     word 1	780	221	92
     word 2	791	233
     word 3	772
-    word 4	186	20	4	2
+    phrase	186	20	4	2
 
     Solution time: 20 minutes on my macbook pro.
 
+.   Going back to step 5 & 6 - we further reduce the solving of words to 
+    1 pass on words 1 & 2, it reduces the number of attempts at the cost
+    of a larger dictionary and compute time like so:
+
+    Length : 1000
+    Spaces : 6375
+    Word 1 : 1000
+    Word 2 : 999
+    Phrase : 1615
+    TOTAL  : 10989
+
+    word 0	6517
+    word 1	780	222
+    word 2	792	233
+    word 3	774
+    phrase	2040	116	13	3
+
+    Solution time: 46 minutes on my macbook pro.
+    This is the last one I did for submitting to the codegolf site
+
+.   Just as an experiment, I went the other way - to solving words 1 & 2
+    completely, before attacking word 3 (the way I did my original solution
+    except that now I had improved code, analytics and probing strategies).
+    This is what I got:
+    Length : 1000
+    Spaces : 6375
+    Word 1 : 5541
+    Word 2 : 5600
+    Word 3 : 34
+    TOTAL  : 18550
+
+    word 0	6517
+    word 1	780	330	124	50	20	9	4	...
+    word 2	793	329	127	51	21	9	4	...
+    word 3	776	1
+
+    Solution time: 6 seconds on my macbook pro.
+
+Summarized Learnings:
+.   I think this approach can be taken further to reduce the word solving 
+    attempts, but that only increases the compute cost.
+    It is interesting to think of this problem as having 2 parts:
+       The most information that you can gather with a single attempt
+       The best way to use that to reduce the number of attempts (and compute cost)
+
+    Learnings and techniques used:
+    . Single query to get the length of the phrase - great!
+    . Same query to get the count of any 1 character - awesome!
+      (Thanks to Roy who got this first)
+    . Space finding as a constraint optimization - interesting
+    . Using constraints for phrases in a modified way for words
+    . Tacking on additional probe payload in the attempts such that the 
+      immediate usefulness of the attempts is not impacted.
+
+     There is other interesting learnings about how to craft attempts - I 
+     believe that identifying the low frequency characters helps to reduce
+     the problem size, including word dictionaries.  My hypothese has been that 
+     the best probe strategy is to get something like:
+	 e : 3
+	 iarsn : 11
+	 tolcd : 7
+	 umpgh : 0
+	 byfvk : 3
+	 wzxjq : 4
+
+     The winner of this challenge seems to believe the opposite, getting the
+     count of single characters from the high frequency side!
