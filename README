@@ -277,3 +277,23 @@ Summarized Learnings:
 
      The winner of this challenge seems to believe the opposite, getting the
      count of single characters from the high frequency side!
+
+Wrote this too soon!
+    When I wrote it, the top contender was Roy Van Rijn with 10836.
+
+    The winner of the challenge - Peter Weistroffer - went onto win the 
+    challenge with the following strategy (9447):
+    phase 1: 1st guess: Get length, and test for odd/even spaces.
+    phase 2: Look for spaces, and test multiple chars  The chars are 
+             selected to always include 2 out of e/i/a/s, and such that 
+	     half the phrase length is expected return.
+	     (repeat till spaces are known)
+    phase 3: Select frequent characters for the main query, and continue 
+             with the frequency collection for the additional string
+    phase 4: Solve the mastermind puzzle - 2 strategies, 1 for large, 
+             and 1 for small set size.
+
+    Code is in scala, and only 350 lines!
+    For speed, character counts (top 7) were put into a long, and comparision
+    was used.  The other counts were ignored to improve speed.
+
