@@ -297,3 +297,108 @@ Wrote this too soon!
     For speed, character counts (top 7) were put into a long, and comparision
     was used.  The other counts were ignored to improve speed.
 
+Looking at some basic counting - before digging into a new solution:
+Word Size Distribution in the dictionary
+     1: 5
+     2: 31
+     3: 146
+     4: 473
+     5: 944
+     6: 1378
+     7: 1615
+     8: 1584
+     9: 1313
+    10: 1023
+    11: 644
+    12: 405
+    13: 229
+    14: 117
+    15: 55
+    16: 18
+    17: 14
+    18: 4
+    20: 1
+    21: 1
+
+    // We know nothing but the dictionary - what is the potential size of 
+    // the phrase dictionary
+544,433,496,623		takes 39 bits to represent
+
+    // Assuming that we know wordlength, but not the locations of the 
+    // spaces, what is the potential size of the phrase dictionary
+ 29,627,753,185		takes 35 bits to represent
+
+    // Now that we know wordlength, and the locations of the spaces, what is 
+    // the potential size of the phrase dictionary
+  1,588,088,745		takes 31 bits to represent
+
+    // Now that we know wordlength, the locations of the spaces and some 
+    // constraints on the words, what is the potential size of the phrase 
+    // dictionary  (These are the constraints used in my submission to 
+    // codegolf, and applied at the word level)
+    610,831,087		takes 30 bits to represent
+
+    Average Dictionary sizes are: 780, 793, 776
+
+    This took 7.4 attempts to get to, which is a problem, because we have only
+    reduced entropy by 9 bits in 7 attempts - of which the first attempt itself
+    gave us 4 bits reduction!
+
+Current State (Sep 14, 2014)
+    Reworked this to be similar to Weistroff's process:
+    phase 1: 1st guess: Get length, and test for odd/even spaces.
+    phase 2: Look for spaces.  
+             2 sub-phases: a where the number of possible pairs is large, 
+	     Here, we partition the unknown places based on what we know
+	     trying to get responses (0,1,2) to be in proportion (1:2:1).
+	     b. When the number of pairs is small < 8, evaluate all possible
+	     partitions and select the best.
+	     Appears to be performing poorer than a previous implementation,
+	     where we got the space identification in 5347 attempts.
+	     Look for character counts: 
+		 divide characters by quartiles based on their contribution
+		 to the dictionary words: q1, q2, q3, q4
+		 attempt 1: characters from q1, q2
+		 attempt 2: characters from q2, q3
+		 attempt 3: (intersection of 1&2) characters from q2
+		 Now we know counts from each quarter!
+		 attempt 4: find collection with lowest count, partition it into
+		 2 equal halves, and use one of them.
+		 attempt 5: Odd (in frequency rank)
+		 attempt 6: 0,1, 4,5, 8,9, ...
+		 attempt 7: intersection of 5,6
+             Broadly: Test a group that accounts for 50% of characters in dict.
+	     The result tells us the count for the tested set, and the rest!
+	     When you intersect 2 consecutive tests, you know all 4 quartiles
+	     individually in 3 tests.  This should help reduce dict size.
+	     Breaking up the least count set into 2 should help reduce dict
+	     size even more.
+
+	     (repeat till spaces are known)
+    phase 3: Reduce dictionary based on constraints discovered in phase 2.
+             Create 3 sub dictionaries (1 for each word).
+	     Do a cross product to get all possible phrases.
+	     Apply all known information so far to reduce this.
+	     Now - apply mastermind solving techniques to solve.
+The results are:
+    Spaces : 6438
+    Phrase : 3440
+    TOTAL  : 9878
+
+    word 0	6971
+    word 1	841
+    word 2	854
+    word 3	835
+    phrase	1000252	38307	1507	112	11	3	2
+		20	16	11	7	4	2	1
+
+Going back to our thinking about the information - it looks like that the 
+phrase dictionary is about a million (20 bits) long on average, and reduces
+to a solution in 3.4 attempts, wih a max of 7!  This is a reduction of 4
+bits per guess.
+
+This (9878) is still worse than the winning solution - 9447 and took 10.5 hours on my macbook pro!
+
+Known improvements:
+a. Space Finding - can be improved
+b. Space finding phase - different strategies could be tried

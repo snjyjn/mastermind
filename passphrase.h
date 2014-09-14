@@ -1,6 +1,8 @@
 #ifndef __PASSPHRASE_H__
 #define __PASSPHRASE_H__
 
+#include "utils.h"
+
 using namespace std;
 
 /*

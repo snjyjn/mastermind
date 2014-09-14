@@ -1,23 +1,25 @@
 #include <iostream>
-#include <vector>
-#include <string>
+#include <unordered_set>
+#include <algorithm>
 #include <assert.h>
 
 #include "utils.h"
 #include "spacefinder.h"
-#include "passphrase.h"
-#include "dictionary.h"
-#include "mastermind.h"
 
 using namespace std;
 
 // Constructor - not very interesting
-SpaceFinder::SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, int maxWordLen, int phraseLen) {
+SpaceFinder::SpaceFinder(Dictionary *d, PassPhrase *p,
+			 TestPatternGenerator *tpg, GuessHistory *hist,
+			 int minWordLen, int maxWordLen) {
     this->p = p;
     this->d = d;
+    this->tpg = tpg;
+    this->hist = hist;
     this->minWordLen = minWordLen;
     this->maxWordLen = maxWordLen;
-    this->maxPhraseLength = phraseLen;
+    this->maxPhraseLength = 3*maxWordLen + 2;
+    phraseLength = -1;
     dictFreq = d->getCharsByFrequency();
     debug = false;
     state = NULL;
@@ -34,8 +36,64 @@ SpaceFinder::~SpaceFinder() {
     delete state;
 }
 
+void
+SpaceFinder::setMaxPhraseLength(int phraseLength) {
+    this->phraseLength = phraseLength;
+    maxPhraseLength = phraseLength;
+    state = NULL;
+    possible = NULL;
+
+    // Go to a clean state
+    initialize();
+}
+
+int
+SpaceFinder::findPhraseLength() {
+    // There are methods to create test strings, but since the data structures
+    // are not yet initialized, we do the string creation in here, get the
+    // phrase length, and then initialize the structures!
+
+    vector<int> test_group;
+    vector<int> ignore_group;
+
+    // The candidate phrase
+    string phrase;
+
+    for (int i=0; i<maxPhraseLength; ++i) {
+	if (i%2 == 0) {
+	    phrase.append(1,consts::spc);
+	    test_group.push_back(i);
+	} else {
+	    phrase.append(1,consts::zpc);
+	    ignore_group.push_back(i);
+	}
+    }
+
+    // Additional testing sneaked in here!
+    int additionalTestCounter = 0;
+    string tc = tpg->getTestCombo(additionalTestCounter);
+    string testChars = appendTestPhrase(tc);
+
+    phrase.append(testChars);
+
+    // Test the candidate phrase againt the passphrase
+    int pos, chars;
+    p->match(phrase, pos, chars);
+
+    // Set the maximum phrase length.  This also initializes all the
+    // data structures
+    setMaxPhraseLength(chars);
+
+    hist->push_back(new GuessHistoryElement(phrase, pos, chars));
+    processMatchResponse(pos, test_group, ignore_group);
+
+    int additionalTestCharCount = chars - 2;
+    additionalTestCounter = tpg->setCharCount(additionalTestCounter, tc, additionalTestCharCount);
+    return chars;
+}
+
 // Initialize the space finder - prior to searching for spaces.
-// Allows the same instance to be used for multiple searches - not that we 
+// Allows the same instance to be used for multiple searches - not that we
 // are doing it!
 void
 SpaceFinder::initialize() {
@@ -49,55 +107,37 @@ SpaceFinder::initialize() {
     for (int i=0; i<maxPhraseLength; ++i) {
 	possible[i] = new int[maxPhraseLength];
 	for (int j=0; j<maxPhraseLength; ++j) {
-	    if (i < j) {
-		possible[i][j] = 1;
-	    } else {
-		possible[i][j] = 0;
-	    }
+	    possible[i][j] = 0;
 	}
     }
 
-    // The first space will follow the first word, which can be of length
-    // [minWordLen - maxWordLen] inclusive.
-    // The second space will follow the next word, which is in the same 
-    // range
-
+    // There are 3 words, of lengths len1, len2, len3 separated by 1 space
+    // hence space1 = len1, space2 = len1 + 1 + len2
+    // Each of len1, len2, and len3 can be [minWordLen - maxWordLen] inclusive.
+    // Mark all position pairs that satisfy these conditions as possible soln.
     for (int i=0; i<maxPhraseLength; ++i) {
-	if ((i>= minWordLen) && (i<= maxWordLen)) {
+	int len1 = i;
+	if ((len1 >= minWordLen) && (len1 <= maxWordLen)) {
 	    for (int j=0; j<maxPhraseLength; ++j) {
-		int len = j - i;  // second word length
-		if ((len>= minWordLen) && (len<= maxWordLen)) {
+		int len2 = j - i - 1;  // second word length
+		int len3 = phraseLength - j - 1; // third word length
+		assert ((len1 + len2 + len3 + 2) == maxPhraseLength);
+		if ((len2 >= minWordLen) && (len2 <= maxWordLen) &&
+		    (len3 >= minWordLen) && (len3 <= maxWordLen)) {
 		    assert(i < j);
 		    possible[i][j] = 1;
-		} else {
-		    possible[i][j] = 0;
 		}
 	    }
-	} else {
-	    for (int j=(i+1); j<maxPhraseLength; ++j) {
-		possible[i][j] = 0;
-	    }
 	}
-    }
-
-    // From this discussion it is clear that we need to set some elements in
-    // state accordingly.
-    // 0 - minWordLen is out of bounds!
-    for (int i=0; i<minWordLen; ++i) {
-	state[i] = -1;
-	state[maxPhraseLength-i-1] = -1;
-    }
-    // (2 * maxWordLen) + 2  to maxPhraseLength is also out of bounds
-    // TODO: Test for off by 1
-    for (int i=(2*(maxWordLen + 1)); i<maxPhraseLength; ++i) {
-	state[i] = -1;
     }
 
     updateInternalState();
 }
 
-void 
+void
 SpaceFinder::updateInternalState() {
+    // Where state is -1 (known not possible), remove all pairs which
+    // include it.
     for (int i=0; i<maxPhraseLength; ++i) {
 	if (state[i] == -1) {
 	    for (int j=0; j<maxPhraseLength; ++j) {
@@ -110,6 +150,8 @@ SpaceFinder::updateInternalState() {
 	}
     }
 
+    // For nodes that are not in any possible pair.
+    // Mark them as known not possible.
     for (int i=0; i<maxPhraseLength; ++i) {
 	if (state[i] == 0) {
 	    bool flag;
@@ -125,6 +167,7 @@ SpaceFinder::updateInternalState() {
 	}
     }
 
+    // update the internal state
     countUnknowns = 0;
     for (int i=0; i<maxPhraseLength; ++i) {
 	if (state[i] == 0) {
@@ -136,37 +179,57 @@ SpaceFinder::updateInternalState() {
 
 // Given a collection of positions, of which only 1 can be a space
 // update the possible matrix!
-void 
+void
 SpaceFinder::foundExclusiveSet(vector<int> &coll) {
-    for (vector<int>::iterator it1 = coll.begin();
-	 it1 != coll.end(); ++it1) {
-	int i = *it1;
-	for (vector<int>::iterator it2 = coll.begin();
-	     it2 != coll.end(); ++it2) {
-	    int j = *it2;
-	    if (i < j) {
-		possible[i][j] = 0;
-	    } else if (i > j) {
-		possible[j][i] = 0;
+    if (coll.size() == 1) {
+	// Special handling - we have 1 entry, and it is to be marked as
+	// 'known'.  Not confident that the code will handle this case yet
+	// so marking it unknown, but fixing 'possible'
+	int known = coll[0];
+	for (int i=0; i<maxPhraseLength; ++i) {
+	    for (int j=0; j<maxPhraseLength; ++j) {
+		if ((i != known) && (j != known)) {
+		    if (possible[i][j] == 1) {
+			possible[i][j] = 0;
+		    }
+		}
+	    }
+	}
+    } else {
+	for (vector<int>::iterator it1 = coll.begin();
+	     it1 != coll.end(); ++it1) {
+	    int i = *it1;
+	    if (i < maxPhraseLength) {
+		for (vector<int>::iterator it2 = coll.begin();
+		     it2 != coll.end(); ++it2) {
+		    int j = *it2;
+		    if (j < maxPhraseLength) {
+			if (i < j) {
+			    possible[i][j] = 0;
+			} else if (i > j) {
+			    possible[j][i] = 0;
+			}
+		    }
+		}
 	    }
 	}
     }
 }
 
 // Mark all entries in the collection as known - non spaces
-void 
+void
 SpaceFinder::excludeSet(vector<int> &coll) {
     for (vector<int>::iterator it1 = coll.begin(); it1 != coll.end(); ++it1) {
 	int i = *it1;
-	state[i] = -1;
+	if (i < maxPhraseLength) {
+	    state[i] = -1;
+	}
     }
 }
 
 
-DictConstraints&
-SpaceFinder::findSpaces(GuessHistory &hist, 
-			TestPatternGenerator *tpg,
-			int &space1, int &space2) {
+DictConstraints *
+SpaceFinder::findSpaces(int &space1, int &space2) {
     // Setup the internal state to be clean based on all possible information
     initialize();
 
@@ -180,63 +243,18 @@ SpaceFinder::findSpaces(GuessHistory &hist,
 
     // Solution Strategy:
     // First make a set of binary search like passes through the positions
-    // Always have half as space, and half as invalid.  The number of contiguous
-    // spaces halves in each iteration till we get to 1.
+    // Always have half as space, and half as invalid.
 
     // Additional information strategy:  Move to TestPatternGenerator
     int additionalTestCounter = 1;
     DictConstraints *rc = new DictConstraints();
 
-    int targetContigLength = countUnknowns/2;
-
     // The candidate phrase
     string phrase;
 
-    while (targetContigLength > 0) {
-	// Now we can divide the unknown positions into 2 groups, one of which 
+    while (countUnknowns > 2) {
+	// Now we can divide the unknown positions into 2 groups, one of which
 	// we are testing with a space, and the other that we are ignoring
-	vector<int> test_group;
-	vector<int> ignore_group;
-
-	// The candidate phrase
-	phrase = buildTestString(targetContigLength, test_group, ignore_group);
-
-	// Additional Testing sneaked in here!
-	string tc = tpg->getTestCombo(additionalTestCounter);
-	string testChars = appendTestPhrase(tc);
-	charCounts testCounts;
-	testCounts.addToCount(testChars);
-
-	phrase.append(testChars);
-
-	// Test the candidate phrase againt the passphrase
-	int pos, chars;
-	p->match(phrase, pos, chars);
-
-	hist.push_back(new GuessHistoryElement(phrase, pos, chars));
-	processMatchResponse(pos, test_group, ignore_group);
-
-	int additionalTestCharCount = chars - 2;
-	additionalTestCounter = tpg->setCharCount(additionalTestCounter, tc, additionalTestCharCount);
-
-	DictionaryConstraint *dc = new CharMatchWordConstraint(testCounts, additionalTestCharCount);
-	rc->push_back(dc);
-
-	if (debug) {
-	    debugPhrase = buildDebugString();
-	    cout << debugPhrase << consts::eol;
-	    debugprint();
-	    cout << "Unknown : " << countUnknowns 
-		 << " Target : " << targetContigLength
-		 << consts::eol;
-	}
-	targetContigLength /= 2;
-    }
-
-    // We have now exhausted our pre-built test strings.   Initiate tests
-    // that depend on the state!  The loop structure is the same as above, 
-    // except that the test phrase is built differently.
-    while (getPairCount() > 1) {
 	vector<int> test_group;
 	vector<int> ignore_group;
 
@@ -246,52 +264,75 @@ SpaceFinder::findSpaces(GuessHistory &hist,
 	// Additional Testing sneaked in here!
 	string tc = tpg->getTestCombo(additionalTestCounter);
 	string testChars = appendTestPhrase(tc);
-	phrase.append(testChars);
-
 	charCounts testCounts;
 	testCounts.addToCount(testChars);
+
+	phrase.append(testChars);
 
 	// Test the candidate phrase againt the passphrase
 	int pos, chars;
 	p->match(phrase, pos, chars);
 
-	hist.push_back(new GuessHistoryElement(phrase, pos, chars));
+	hist->push_back(new GuessHistoryElement(phrase, pos, chars));
 	processMatchResponse(pos, test_group, ignore_group);
 
 	int additionalTestCharCount = chars - 2;
 	additionalTestCounter = tpg->setCharCount(additionalTestCounter, tc, additionalTestCharCount);
+
 	DictionaryConstraint *dc = new CharMatchWordConstraint(testCounts, additionalTestCharCount);
 	rc->push_back(dc);
 
-	// Created a phrase, tested it, applied the knowledge to internal state
+	if (tc.length() == dictFreq.length()) {
+	    setMaxPhraseLength(chars);
+	    processMatchResponse(pos, test_group, ignore_group);
+	}
 
 	if (debug) {
 	    debugPhrase = buildDebugString();
 	    cout << debugPhrase << consts::eol;
 	    debugprint();
+	    cout << "Unknown : " << countUnknowns
+		 << consts::eol;
 	}
     }
+
     getPair(space1, space2);
     if (debug) {
 	tpg->debugprint();
     }
 
-    DictConstraints tgpc = tpg->getWordConstraints();
-    for (DictConstraints::iterator dc_it=tgpc.begin(); 
-	 dc_it!= tgpc.end(); ++dc_it) {
-	DictionaryConstraint *dc = (*dc_it);
+    // SJ TODO: Why does the tpg not have all the constraints, what is the
+    //          value addition of the constraints from the guess history?
+    //          It is important to understand that to see if we are missing
+    //          something.
+    // SJ TODO: The tpg getWordConstraints can be optimized to remove duplicate
+    //          constraints, and optimize the cpu usage.
+    // SJ TODO: tpg should be able to create PhraseConstraints as well for the
+    //          filtering the phrase dictionary (before it is added)
+    //          These can be optimized as well.  Need to understand if the tpg
+    //          phrases have more filtering power than guess history for that
+    //          case.
+    //          My guess: tpg should be able to do a better job at word
+    //          constraints, but not at phrase constraints.
+
+    DictConstraints *tgpc = tpg->getWordConstraints();
+    while (!tgpc->empty()) {
+	DictionaryConstraint *dc = tgpc->back();
+	tgpc->pop_back();
 	rc->push_back(dc);
     }
+    delete tgpc;
     // There is probably a lot of duplicate constraints in here!
-    return *rc;
+    return rc;
 }
 
-string 
+string
 SpaceFinder::appendTestPhrase(string testChars) {
     string rc;
     for (int i=0; i<maxPhraseLength; ++i) {
 	rc.append(testChars);
     }
+    rc.append(2, consts::spc);
     return rc;
 }
 
@@ -299,14 +340,17 @@ SpaceFinder::appendTestPhrase(string testChars) {
 // The positions were divided into 2 groups, which were combined into a single
 // 'word' for matching.  At most 2 positions can match.  Process the response
 // and incorporate that information in the state.
-void 
-SpaceFinder::processMatchResponse(int pos, 
-                             vector<int>& test_group, 
+// SJ TODO: Confirm that this is equivalent to walking all pairs, and
+//          identifying the ones that would return a value other than returned
+//          and marking possible(tuple) as false.
+void
+SpaceFinder::processMatchResponse(int pos,
+                             vector<int>& test_group,
 			     vector<int>& ignore_group) {
     // There are 3 options:
     // 0 Matches:  All the entries in the test_group are not spaces.
     // 2 Matches:  All the entries in the ignore_group are not spaces.
-    // 1 Match: 1 of the entries in the test_group is a space, and 1 
+    // 1 Match: 1 of the entries in the test_group is a space, and 1
     //          entry in the ignore_group is a space.
     if (pos == 0) {
 	excludeSet(test_group);
@@ -320,73 +364,161 @@ SpaceFinder::processMatchResponse(int pos,
     updateInternalState();
 }
 
-// Partition the unknown spaces into 2 groups - test group and ignore group
-// which are about equal.  Select positions such that they are bunched in 
-// contiguous groups of a given size
-// For instance, if contig == 2 :  "**  **  **  **  **  "
-//               if contig == 4 :  "****    ****    ****"
-// Set the vectors with the grouping selected, and return a string that 
-// can be sent to the matcher
-string
-SpaceFinder::buildTestString(int contig, 
-                             vector<int>& test_group, 
-			     vector<int>& ignore_group) const {
-    string phrase;
-    test_group.clear();
-    ignore_group.clear();
 
-    char currentChar = consts::spc;
-    int currentLength = 0;
-    for (int i=0; i<maxPhraseLength; ++i) {
-	switch(state[i]) {
-	case +1:
-	case -1:
-	    // We already know this value, dont test
-	    phrase.append(1, consts::zpc);	
-	    break;
-	case 0:
-	    phrase.append(1, currentChar);
-	    if (currentChar == consts::spc) {
-		test_group.push_back(i);
-	    } else {
-		ignore_group.push_back(i);
-	    }
-	    currentLength++;
-	    if (currentLength >= contig) {
-		currentChar = (currentChar == consts::spc)
-				? consts::zpc 
-				: consts::spc;
-		currentLength = 0;
-	    }
-	    break;
-	}
-    }
-    return phrase;
-}
-
-// Use the pairs to generate a test string, so that the pair count can be 
+// SJ TODO: Partition this into 2 functions, 1 of which decides which function
+//          to call for the test vector, and then builds the test string
+//          The other function generates a 'good enough' test string
+//          The caller will call that, or the 'getBestTestVector'
+//
+// Use the pairs to generate a test string, so that the pair count can be
 // reduced
 string
-SpaceFinder::buildTestString(vector<int>& test_group, 
+SpaceFinder::buildTestString(vector<int>& test_group,
 			     vector<int>& ignore_group) const {
-    // Identify the first pair - we wil ensure that these 2 entries are in 
-    // the test_group.  The rest of the entries will be distributed between 
-    // the 2 groups.
-    int pos1, pos2;
-    getPair(pos1, pos2);
+    bool goal_met = false;
 
-    bool flag = false;
+    vector<pair<int, int> >* pairs = getPairs();
     int group[maxPhraseLength];
     for (int i=0; i<maxPhraseLength; ++i) {
-	if (state[i] == 0) {
-	    if ((i == pos1) || (i == pos2)) {
-		group [i] = 1;
-	    } else {
-		group [i] = flag?1:2;
-		flag = !flag;
-	    }
+	group[i] = 0;  // unknown
+    }
+    int paircount = pairs->size();
+    if (paircount <= 8) {
+	vector<int> *best = SpaceTestBuilder::getBestTestVector(*pairs);
+	for (vector<int>::iterator it=best->begin(); it!=best->end(); ++it) {
+	    int pos = *it;
+	    group[*it] = 1;
+	}
+	goal_met = true;
+    }
+
+    int count0 = 0;   // The number of pairs impacted if 0 is returned
+    int count1 = 0;   // The number of pairs impacted if 1 is returned
+    int count2 = 0;   // The number of pairs impacted if 2 is returned
+
+    // Goal is count0 == count2, and count0 + count2 == count1
+    int fix_index = 0;	// in case we dont allocate properly, this is the
+			// one we will change
+    int best_grouping[maxPhraseLength];
+    int best_score = -1;
+    while (goal_met == false) {
+    // SJ TODO: Should we do this - or bite the bullet and call getBestVector?
+    //          Careful with that method - it is 2^n complex in number of
+    //          positions.
+	count0 = 0;   // The number of pairs impacted if 0 is returned
+	count1 = 0;   // The number of pairs impacted if 1 is returned
+	count2 = 0;   // The number of pairs impacted if 2 is returned
+	for (vector<pair<int, int> >::iterator it = pairs->begin();
+	     it != pairs->end(); ++it) {
+	     int pos1 = it->first;
+	     int pos2 = it->second;
+	     if ((group[pos1] == 0) && (group[pos2] == 0)) {
+		 // Both positions are open
+		 if ((count0 + count2) <= count1) {
+		     // Put them in the same group
+		     if (count0 <= count2) {
+			 group[pos1] = 1;
+			 group[pos2] = 1;
+			 count0++;
+		     } else {
+			 group[pos1] = 2;
+			 group[pos2] = 2;
+			 count2++;
+		     }
+		 } else {
+		     // Put them in different groups
+		     group[pos1] = 1;
+		     group[pos2] = 2;
+		     count1++;
+		 }
+	     } else if ((group[pos1] != 0) && (group[pos2] != 0)) {
+		 // Both positions are already decided - just count
+		 if (group[pos1] == group[pos2]) {
+		     if (group[pos1] == 1) {
+			 count0++;
+		     } else {
+			 count2++;
+		     }
+		 } else {
+		     count1++;
+		 }
+	     } else {
+		 // One of the positions is decided, the other is not
+		 if ((count0 + count2) <= count1) {
+		     // Choose to put them in the same group
+		     if (group[pos1] == 0) {
+			 group[pos1] = group[pos2];
+		     } else if (group[pos2] == 0) {
+			 group[pos2] = group[pos1];
+		     } else {
+			 assert(false);
+		     }
+		     if (group[pos1] == 1) {
+			 count0++;
+		     } else {
+			 count2++;
+		     }
+		 } else {
+		     // Choose to put them in different groups
+		     if (group[pos1] == 0) {
+			 group[pos1] = (group[pos2] == 1)?2:1;;
+		     } else if (group[pos2] == 0) {
+			 group[pos2] = (group[pos1] == 1)?2:1;;
+		     } else {
+			 assert(false);
+		     }
+		     count1++;
+		 }
+	     }
+	}
+	assert((count0 + count1 + count2) == paircount);
+
+	long long  score = SpaceTestBuilder::scorefn(count0, count1, count2);
+
+	if (score > 0) {
+	    goal_met = true;
 	} else {
-	    group[i] = 0;
+	    for (int i=0; i<maxPhraseLength; ++i) {
+		cout << group[i] << " ";
+	    }
+	    cout << consts::eol;
+	    cout << "(" << count0 << consts::tab << count1
+	         << consts::tab << count2 << ")"
+	         << consts::tab << score
+		 << consts::eol;
+
+	    // lower is better
+	    if ((fix_index == 0) || (best_score > score)) {	
+		best_score = score;
+		for (int i=0; i<maxPhraseLength; ++i) {
+		    best_grouping[i] = group[i];
+		}
+	    }
+	    if (fix_index < paircount) {
+		int pos1, pos2;
+
+		// Undo the prev pair
+		int prev_fix = fix_index-1;
+		if (prev_fix >= 0) {
+		    pos1 = (*pairs)[prev_fix].first;
+		    pos2 = (*pairs)[prev_fix].second;
+		    group[pos1] = (group[pos1] == 1)?2:1;
+		    group[pos2] = (group[pos2] == 1)?2:1;
+		}
+
+		pos1 = (*pairs)[fix_index].first;
+		pos2 = (*pairs)[fix_index].second;
+		group[pos1] = (group[pos1] == 1)?2:1;
+		group[pos2] = (group[pos2] == 1)?2:1;
+
+		fix_index++;
+	    } else {
+		// give up - go to the best option
+		for (int i=0; i<maxPhraseLength; ++i) {
+		    group[i] = best_grouping[i];
+		}
+		goal_met = true;
+	    }
 	}
     }
 
@@ -403,13 +535,13 @@ SpaceFinder::buildTestString(vector<int>& test_group,
 	    break;
 	case 0:
 	    switch(group[i]) {
-	    case 0:
-		assert(false);
-		break;
+		// assert(false);
+		// break;
 	    case 1:
 		phrase.append(1, consts::spc);
 		test_group.push_back(i);
 		break;
+	    case 0:
 	    case 2:
 		phrase.append(1, consts::zpc);
 		ignore_group.push_back(i);
@@ -444,7 +576,7 @@ SpaceFinder::buildDebugString() const {
 }
 
 // Return 1 pair of positions, which could contain spaces
-void 
+void
 SpaceFinder::getPair(int &space1, int &space2) const {
     int pairs = 0;
     for (int i=0; i<maxPhraseLength; ++i) {
@@ -465,7 +597,7 @@ SpaceFinder::getPair(int &space1, int &space2) const {
 
 
 // Count number of known pairs of spaces
-int 
+int
 SpaceFinder::getPairCount() const {
     int pairs = 0;
     for (int i=0; i<maxPhraseLength; ++i) {
@@ -479,8 +611,49 @@ SpaceFinder::getPairCount() const {
     return pairs;
 }
 
+vector<pair<int, int> >*
+SpaceFinder::getPairs() const {
+    vector<pair<int, int> >* rc = new vector<pair<int, int> >();
+    for (int i=0; i<maxPhraseLength; ++i) {
+	for (int j=0; j<maxPhraseLength; ++j) {
+	    if (possible[i][j] == 1) {
+		rc->push_back(make_pair(i,j));
+	    }
+	}
+    }
+    return rc;
+}
 
-void 
+void
+SpaceFinder::printPairs() const {
+    for (int i=0; i<maxPhraseLength; ++i) {
+	int count = 0;
+	for (int j=0; j<maxPhraseLength; ++j) {
+	    if (possible[i][j] == 1) {
+		count++;
+		cout << " X " ;
+	    } else {
+		if (i < j)
+		    cout << " . " ;
+		else
+		    cout << "   " ;
+	    }
+	}
+	cout << consts::tab << count << consts::eol;
+    }
+    for (int j=0; j<maxPhraseLength; ++j) {
+	int count = 0;
+	for (int i=0; i<maxPhraseLength; ++i) {
+	    if (possible[i][j] == 1) {
+		count++;
+	    }
+	}
+	cout << " " << count << " ";
+    }
+    cout << consts::eol;
+}
+
+void
 SpaceFinder::debugprint() const {
     int pairs = getPairCount();
 
@@ -495,156 +668,5 @@ SpaceFinder::debugprint() const {
 	}
 	cout << consts::eol;
     }
-}
-
-TestPatternGenerator::TestPatternGenerator(Dictionary *d) {
-    this->d = d;
-    dictFreq = d->getCharsByFrequency();
-    assert(dictFreq.length() == 26);	// Fails later anyway
-    phraseLen = 0;
-}
-
-void 
-TestPatternGenerator::setPhraseLength(int len) {
-    phraseLen = len;
-}
-
-TestPatternGenerator::~TestPatternGenerator() {
-}
-
-void 
-TestPatternGenerator::debugprint() const {
-    for(vector<pair<string,int> >::const_iterator it = alphaCounts.cbegin(); 
-	it != alphaCounts.cend(); ++it) {
-	cout << it->first << consts::tab << it->second << consts::eol;
-    }
-}
-
-int 
-TestPatternGenerator::setCharCount(int counter, string combo, int count) {
-    counter++;
-    alphaCounts.push_back(make_pair(combo, count));
-    switch(counter) {
-	case 5: 	// we can deduce combo 5
-	    {
-		combo = getTestCombo(counter);
-		int total = 0;
-		for(vector<pair<string,int> >::iterator it = alphaCounts.begin(); 
-		    it != alphaCounts.end(); ++it) {
-		    total += it->second;
-		}
-		alphaCounts.push_back(make_pair(combo, phraseLen - total));
-		counter++;
-	    }
-	    break;
-	case 7: 	// we can deduce combo 7
-	    {
-		combo = getTestCombo(counter);
-		alphaCounts.push_back(make_pair(combo, testLength - count));
-		counter++;
-	    }
-	    break;
-    }
-    return counter;
-}
-
-string 
-TestPatternGenerator::getNextTestCombo() {
-    return getTestCombo(++lastCounter);
-}
-
-string 
-TestPatternGenerator::getTestCombo(int counter) {
-    assert(phraseLen > 0);
-    lastCounter = counter;
-    string rc;
-    switch(counter) {
-	case 0:
-	    assert(false);
-	case 1:
-	    return dictFreq.substr(1, 5);
-	case 2:
-	    return dictFreq.substr(6, 5);
-	case 3:
-	    return dictFreq.substr(11, 5);
-	case 4:
-	    return dictFreq.substr(16, 5);
-	case 5:
-	    return dictFreq.substr(21, 5);
-	case 6:
-	    {
-		int minLen = phraseLen;
-		string minCombo;
-		for(vector<pair<string,int> >::iterator it = alphaCounts.begin(); 
-		    it != alphaCounts.end(); ++it) {
-		    if ((it->second > 0) && (minLen > it->second) && 
-			(it->first.length() > 1)) {
-			minLen = it->second;
-			minCombo = it->first;
-		    }
-		}
-		assert(minLen < phraseLen);
-		// Store this info in state to use in next call!
-		comboToDivide = minCombo; testLength=minLen;
-		return comboToDivide.substr(0, (minCombo.length()/2));
-	    }
-	case 7:
-	    return comboToDivide.substr(comboToDivide.length()/2, 
-	                               comboToDivide.length());
-	case 8:
-	    rc.append(dictFreq.substr(5,1))
-	      .append(dictFreq.substr(10,1))
-	      .append(dictFreq.substr(15,1))
-	      .append(dictFreq.substr(20,1))
-	      .append(dictFreq.substr(25,1));
-	    return rc;
-	case 9:
-	    rc.append(dictFreq.substr(4,1))
-	      .append(dictFreq.substr(9,1))
-	      .append(dictFreq.substr(14,1))
-	      .append(dictFreq.substr(19,1))
-	      .append(dictFreq.substr(24,1));
-	    return rc;
-	case 10:
-	    rc.append(dictFreq.substr(3,1))
-	      .append(dictFreq.substr(8,1))
-	      .append(dictFreq.substr(13,1))
-	      .append(dictFreq.substr(18,1))
-	      .append(dictFreq.substr(23,1));
-	    return rc;
-	case 11:
-	    rc.append(dictFreq.substr(2,1))
-	      .append(dictFreq.substr(7,1))
-	      .append(dictFreq.substr(12,1))
-	      .append(dictFreq.substr(17,1))
-	      .append(dictFreq.substr(22,1));
-	    return rc;
-	case 12: rc = dictFreq.substr(1,1); return rc;
-	case 13: rc = dictFreq.substr(6,1); return rc;
-	case 14: rc = dictFreq.substr(11,1); return rc;
-	case 15: rc = dictFreq.substr(16,1); return rc;
-	case 16: rc = dictFreq.substr(21,1); return rc;
-	default:
-	    return rc;
-    }
-    return rc;
-}
-
-DictConstraints&
-TestPatternGenerator::getWordConstraints() const {
-    DictConstraints *rc = new DictConstraints();
-    for(vector<pair<string,int> >::const_iterator it = alphaCounts.cbegin(); 
-	it != alphaCounts.cend(); ++it) {
-	int matchCount = it->second;
-	string chars = it->first;
-	string temp;
-	for (int i=0; i<matchCount; ++i) {
-	    temp.append(chars);
-	}
-	charCounts counts;
-	counts.addToCount(temp);
-	DictionaryConstraint *dc = new CharMatchWordConstraint(counts, matchCount);
-	rc->push_back(dc);
-    }
-    return *rc;
+    printPairs();
 }

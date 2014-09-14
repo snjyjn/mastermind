@@ -1,23 +1,29 @@
 #ifndef __DICTIONARY_H__
 #define __DICTIONARY_H__
 
-#include <vector>
-
 #include "utils.h"
 
 using namespace std;
 
-/* 
+/*
  * A Dictionary contains all the words that can be used within the passphrase.
- * The dictionary class provides a mechanism to initialize from a file, 
+ * The dictionary class provides a mechanism to initialize from a file,
  * perform precomputations, collect statistics, and support the guesser.
  * Operations include creating subdictionaries based on specified constraints.
  *
  * A Dictionary contains DictionaryEntry objects, each of which represents
  * a word, with associated metrics.
+ *
+ * A subdictionary is a dictionary that contains a subset of the entris
+ * of a dictionary.  It is normally created by applying constraints to a
+ * dictionary, and filtering out the elements that dont match the constraint
+ * specified.   DictionaryConstraint is an Abstract Base Class that specifies
+ * these constraints.
+ *
+ * dictionary.h and dictionary.cpp contain the entire dictionary system
+ * definition and implementation.
  */
 
-// Only dictionary needs to access dictionary entries!  Use friend!
 class DictionaryEntry {
     public:
 	DictionaryEntry(string word);
@@ -31,11 +37,13 @@ class DictionaryEntry {
 
 	const string &getWord() const;
 
-	// Compare 2 dictionary entries, and count the number of characters 
+	// Compare 2 dictionary entries, and count the number of characters
 	// that match
 	int characterMatch(const DictionaryEntry* de) const;
 
 	int characterMatch(const charCounts &cc) const;
+
+	int positionMatch(const string word) const;
 
 	// Combine the character frequencies from this entry into a global
 	// frequency table
@@ -45,7 +53,6 @@ class DictionaryEntry {
 	friend class Dictionary;
 
     private:
-	// Called explicitly from a dictionary that knows what to delete.
 	~DictionaryEntry();
 
 	string word;		// The actual word
@@ -56,23 +63,70 @@ class DictionaryEntry {
 	int uniqChars;		// number of unique characters in the word
 };
 
-// A DictionaryConstraint is an abstract base class, which contains a 
+// A DictionaryConstraint is an abstract base class, which contains a
 // mechanism to constrain a dictionary and hence create a subdictionary.
 // The class contains a method to match with a DictionaryEntry, and return
 // true if the entry is a match, and false if not.
 class DictionaryConstraint {
     public:
 	virtual ~DictionaryConstraint();
-	virtual bool match(DictionaryEntry *de) const = 0;
-	virtual void explain(DictionaryEntry *de) const = 0;
+	virtual bool match(const DictionaryEntry *de) const = 0;
+	virtual void explain(const DictionaryEntry *de) const = 0;
 	virtual void debugprint() const = 0;
 };
 
-typedef vector<DictionaryConstraint *> DictConstraints;
-
-class DictUtils {
+// DictConstraints is a collection of constraints.  It is also a
+// constraint.  When this is specified, it implies that the entire
+// collection of constraints is used to filter the dictionary.
+//
+// TOOO SJ: Choose a better name for this class, it is a collection
+//          Also, should it be a vector or some other collection?
+class DictConstraints: public DictionaryConstraint,
+                       public vector<DictionaryConstraint *> {
     public:
-	static void clearDictConstraints(DictConstraints &constraints);
+	DictConstraints();
+
+	virtual ~DictConstraints();
+	virtual bool match(const DictionaryEntry *de) const;
+	virtual void explain(const DictionaryEntry *de) const;
+	virtual void debugprint() const;
+
+	void clear();
+};
+
+class DictSizeConstraint: public DictionaryConstraint {
+    public:
+	DictSizeConstraint(int size);
+
+	virtual ~DictSizeConstraint();
+	virtual bool match(const DictionaryEntry *de) const;
+	virtual void explain(const DictionaryEntry *de) const;
+	virtual void debugprint() const;
+    private:
+        int size;
+};
+
+
+// A DictionaryConstraint that performs a match on character positions
+// This is designed for the entire phrase match, or a word match
+// For instance, we are aware that "abcd" matches in 2 positions, we can
+// reduce the dictionary to all entries that match "abcd" in 2 positions
+//
+// NOTE: PosMatchContraint excludes entries that match the entire word
+//       since that is known to not be a complete match!
+class PosMatchConstraint : public DictionaryConstraint {
+    public:
+	PosMatchConstraint(string word, int matchCount);
+	virtual ~PosMatchConstraint();
+
+	virtual bool match(const DictionaryEntry *de) const;
+	virtual void explain(const DictionaryEntry *de) const;
+	virtual void debugprint() const;
+
+    protected:
+	string word;
+	int posMatchCount;
+	bool allowSelfMatch;
 };
 
 // A DictionaryConstraint that performs a match on character counts
@@ -84,34 +138,51 @@ class CharMatchConstraint : public DictionaryConstraint {
 	CharMatchConstraint(charCounts counts, int matchCount);
 	virtual ~CharMatchConstraint();
 
-	virtual bool match(DictionaryEntry *de) const;
-	virtual void explain(DictionaryEntry *de) const;
+	virtual bool match(const DictionaryEntry *de) const;
+	virtual void explain(const DictionaryEntry *de) const;
 	virtual void debugprint() const;
 
-    private:
+    protected:
 	charCounts counts;
 	int charMatchCount;
 };
 
 // A DictionaryConstraint that performs a match on character counts
-// This is designed for a word match before we have the final 
+// This is designed for a word match before we have the final
 // constraint.
 // For instance, when we are aware that a string "abc" has only 1 match
 // in the phrase, the word should have at most 1 of these.
 //
-
-class CharMatchWordConstraint : public DictionaryConstraint {
+class CharMatchWordConstraint : public CharMatchConstraint {
     public:
 	CharMatchWordConstraint(charCounts counts, int matchCount);
-	virtual ~CharMatchWordConstraint();
+	virtual bool match(const DictionaryEntry *de) const;
+	virtual void debugprint() const;
+};
 
-	virtual bool match(DictionaryEntry *de) const;
-	virtual void explain(DictionaryEntry *de) const;
+// A DictionaryConstraint that implements the classic mastermind constraint
+// on both character count, and position matches.
+//
+// NOTE: Assuming that the constraint is specified based on an existing
+//       entry in the dictionary, MastermindConstraint will always reduce
+//       the dictionary size by 1 when the guess is not a complete match
+class MasterMindConstraint : public DictionaryConstraint {
+    public:
+	MasterMindConstraint(string word, int chars, int pos);
+	virtual ~MasterMindConstraint();
+
+	virtual bool match(const DictionaryEntry *de) const;
+	virtual void explain(const DictionaryEntry *de) const;
 	virtual void debugprint() const;
 
-    private:
-	charCounts counts;
+    protected:
+	string word;
 	int charMatchCount;
+	int posMatchCount;
+
+	int wlen;
+	charCounts counts;
+	bool allowSelfMatch;
 };
 
 // The actual dictionary class
@@ -124,20 +195,24 @@ class Dictionary {
 	// Read the dictionary from the file, 1 word per line
 	void initialize(string filename);
 
+	// Add a word to a dictionary
+	void addWord(string word);
+
 	// Return the i'th word in the dictionary.
 	// Would have been better to implement an iterator
 	const string & getWord(int i) const;
 
+	// Get a const reference to a dictionary entry - useful for stats
+	// and other reasons.
+	const DictionaryEntry *getEntry(int i) const;
+
+	const DictionaryEntry& operator[](int i) const;
+
 	// if strategy is 0 -> create a synthetic test word and return it
-	// if strategy is 1 -> The dictionary stores the word with the max 
+	// if strategy is 1 -> The dictionary stores the word with the max
 	//                     number of uniq chars in a word.  Return that
 	// else return the word in the middle of the dictionary
 	string getGuessWord(int strategy) const;
-
-	// Create a synthetic word (not from the dictionary) based on the 
-	// character distribution, so that it can be used for hangman!
-	// There are 2 strategies at this time!
-	string createTestWord(int strategy) const;
 
 	void debugprint() const;
 
@@ -153,41 +228,27 @@ class Dictionary {
 
 	int getWordCount() const;
 
-	// TODO: Convert all subdictionary methods to use DictionaryConstraint
-	// and to actually reduce the size of the current dictionary.
-	// Also provide a shallow clone method.
-
-	// Get a sibdirectory of all words with a given size
-	Dictionary *getSubDictionary(int size);
-
-	// Get a subdirectory of all words that match the guess in terms 
-	// of number of characters (present in the guess)
-	Dictionary *getSubDictionary(string word, int positionMatches) const;
-
-	// Get a subdirectory of all words that match the guess in terms 
-	// of number of characters (present in the guess) and positions
-	Dictionary * getSubDictionary(string word, int pos, int chars) const;
-
-	// Apply a collection of constraints and get a smaller subdictionary
-	Dictionary *getSubDictionary(const DictConstraints &constr, 
-	                             bool debugThisCall = false) const;
-
-	// Add a word to a dictionary
-	void addWord(string word);
+	// Get a sibdirectory given a constraint
+	Dictionary *getSubDictionary(const DictionaryConstraint& dc,
+	                             bool debugThisCall=false) const;
 
     private:
+	// Create a synthetic word (not from the dictionary) based on the
+	// character distribution, so that it can be used for hangman!
+	string createTestWord() const;
+
 	// A valid word contains only lower case alphabets [a-z]
 	static bool validateWord(string word);
 
-	// For memory manangement, dictionary needs to delete the 
-	// entries.  Since we are creataing subdictionaries which 
+	// For memory manangement, dictionary needs to delete the
+	// entries.  Since we are creataing subdictionaries which
 	// result in copying of references, this is done carefully
 	// This method will be called only from the destructor
 	void deleteEntries();
 
-	bool debug;
-
 	void addEntry(DictionaryEntry *e);
+
+	bool debug;
 
 	// The actual collection of entries
 	vector<DictionaryEntry *> *entries;
@@ -205,6 +266,16 @@ class Dictionary {
 
 	charCounts freq; 	// character frequencies
 				// Number of words that have a certain character
+};
+
+class DictUtils {
+    public:
+	// Get a count of the number of words that match a particular size in
+	// the dictionary
+	static void getDictSizeDistribution(const Dictionary *d, pInt &counts);
+
+	// Get a count of the dictionary entries which have a particular char
+	static charCounts getDictCharDistribution(const Dictionary *d);
 };
 
 #endif

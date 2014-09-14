@@ -1,4 +1,5 @@
 #include <iostream>
+#include <math.h>
 #include <assert.h>
 
 #include "utils.h"
@@ -52,14 +53,14 @@ charCounts::reset() {
     }
 }
 
-void 
+void
 charCounts::addToCount(const string &word) {
     for (string::const_iterator it = word.cbegin(); it != word.cend(); ++it) {
 	counts[utils::ctoi(*it)] += 1;
     }
 }
 
-void 
+void
 charCounts::addToCount(const charCounts &other) {
     for (int i=0; i<charArraySize; ++i) {
 	counts[i] += counts[i];
@@ -75,16 +76,47 @@ charCounts::match(const charCounts& other) const {
     return match;
 }
 
+// Returns if "other" is equal to this
+bool
+charCounts::isEqual(const charCounts& other) const {
+    for (int i=0; i<charArraySize; ++i) {
+	if (other.counts[i] != counts[i])
+	    return false;
+    }
+    return true;
+}
+
+// Returns if "other" is a subset of this
+bool
+charCounts::isSubSet(const charCounts& other) const {
+    for (int i=0; i<charArraySize; ++i) {
+	if (other.counts[i] > counts[i])
+	    return false;
+    }
+    return true;
+}
+
+// remove another word from this (repr as a counter)
+void
+charCounts::removeFromCount(const charCounts& other) {
+    for (int i=0; i<charArraySize; ++i) {
+	counts[i] -= other.counts[i];
+	if (counts[i] < 0) {
+	    counts[i] = 0;
+	}
+    }
+}
+
 int
 charCounts::uniqCounts() const {
     int uniq = 0;
     for (int i=0; i<charArraySize; ++i)
-	if (counts[i] > 0) 
+	if (counts[i] > 0)
 	    uniq++;
     return uniq;
 }
 
-string 
+string
 charCounts::getCharsByFrequency() const {
     vector<pair<int,char> > wordFreq;
     for(int i=0; i<charArraySize; ++i) {
@@ -95,14 +127,25 @@ charCounts::getCharsByFrequency() const {
     sort(wordFreq.begin(), wordFreq.end(), greater<pair<int,char> >());
 
     string rc;
-    for(vector<pair<int,char> >::iterator it = wordFreq.begin(); 
+    for(vector<pair<int,char> >::iterator it = wordFreq.begin();
         it != wordFreq.end(); ++it) {
 	rc.append(1, it->second);
     }
     return rc;
 }
 
-void 
+string
+charCounts::getChars() const {
+    string rc;
+    for (int i=0; i<charArraySize; ++i) {
+	if (counts[i] > 0) {
+	    rc.append(counts[i], utils::itoc(i));
+	}
+    }
+    return rc;
+}
+
+void
 charCounts::debugprint() const {
    for (int i=0; i<charArraySize; ++i) {
        if (counts[i] > 0) {
@@ -113,7 +156,7 @@ charCounts::debugprint() const {
    cout << consts::eol;
 }
 
-char 
+char
 utils::itoc(int i) {
     if (i == 26) {
 	return consts::spc;
@@ -124,7 +167,7 @@ utils::itoc(int i) {
     }
 }
 
-int 
+int
 utils::ctoi(char c) {
     if (c == consts::spc) {
 	return 26;
@@ -155,15 +198,15 @@ GuessHistoryElement::GuessHistoryElement(const string word, int pos, int chars) 
 GuessHistoryElement::~GuessHistoryElement() {
 }
 
-bool 
+bool
 GuessHistoryElement::phraseMatch(const string &candidate) const {
     charCounts candidateCounts;
     candidateCounts.addToCount(candidate);
     return phraseMatch(candidateCounts, candidate);
 }
 
-bool 
-GuessHistoryElement::phraseMatch(const charCounts &candidateCounts, 
+bool
+GuessHistoryElement::phraseMatch(const charCounts &candidateCounts,
 			         const string &candidate) const {
     int characterMatches = counts.match(candidateCounts);
     if (characterMatches != chars) {
@@ -184,19 +227,12 @@ GuessHistoryElement::phraseMatch(const charCounts &candidateCounts,
     return true;
 }
 
-bool 
-GuessHistoryElement::subPhraseMatch(const charCounts &candidateCounts) const {
-    int characterMatches = counts.match(candidateCounts);
-    return (characterMatches <= chars);
-}
-
-
 // For analysis purposes:
 
 GuessAnalytics::GuessAnalytics() {
     attempts = new vector<int>(9, 0);
     state = 0;
-    for (int i=0; i<4; ++i) {
+    for (int i=0; i<6; ++i) {
 	for (int j=0; j<50; ++j) {
 	    dictSizes[i][j] = 0;
 	    dictSizeCount[i][j] = 0;
@@ -205,7 +241,7 @@ GuessAnalytics::GuessAnalytics() {
     count = 0;
 }
 
-void 
+void
 GuessAnalytics::setState(int s) {
     state = s;
     if (s == PHRASETEST) {
@@ -213,23 +249,23 @@ GuessAnalytics::setState(int s) {
     }
 }
 
-void 
+void
 GuessAnalytics::addAttempt() {
     (*attempts)[state]++;
 }
 
-void 
-GuessAnalytics::addDictSize(int wordNumber, int attempt, int size) {
-    assert(wordNumber < 5);
+void
+GuessAnalytics::addDictSize(int wordNumber, int attempt, long long size) {
+    assert(wordNumber < 6);
     assert(attempt < 50);
     dictSizes[wordNumber][attempt] += size;
     dictSizeCount[wordNumber][attempt]++;
 }
 
-void 
+void
 GuessAnalytics::printAnalysis() {
     string  names[] = {
-	"Length", 
+	"Length",
 	"Spaces",
 	"Word 1",
 	"Word 2",
@@ -251,12 +287,21 @@ GuessAnalytics::printAnalysis() {
 	cout << "word " << i;
 	for (int j=0; j<50; ++j) {
 	    if (dictSizeCount[i][j] > 0) {
-		cout << consts::tab    // << j << ": " 
+		cout << consts::tab    // << j << ": "
 		     << (dictSizes[i][j]/dictSizeCount[i][j]);
 	    }
 	}
 	cout << consts::eol;
     }
+    for (int j=0; j<50; ++j) {
+	if (dictSizeCount[4][j] > 0) {
+	    long long sz = dictSizes[4][j]/dictSizeCount[4][j];
+	    int bits = ceil(log(sz) / log(2));
+	    cout << consts::tab    // << j << ": "
+		 << bits;
+	}
+    }
+    cout << consts::eol;
 }
 
 // Global!

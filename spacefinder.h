@@ -1,55 +1,11 @@
 #ifndef __SPACEFINDER_H__
 #define __SPACEFINDER_H__
 
-#include <iostream>
-#include <algorithm>
-#include <vector>
-
-#include "utils.h"
 #include "passphrase.h"
 #include "dictionary.h"
+#include "testpattern.h"
 
 using namespace std;
-
-class TestPatternGenerator {
-    public:
-	TestPatternGenerator(Dictionary *d);
-
-	~TestPatternGenerator();
-
-	// Get a test pattern, to be used when there are no other alpha 
-	// chars in the test string.  
-	// id 0: Returns a string with all 26 alphabets, repeated max times
-	//       with the first max characters being the most frequent char
-	// This returns the size of the phrase.
-	// id 1-4: return a string with low freqeuncy character combinations,
-	//       which can be used to reduce the dictionary size.
-	const string& getPattern(int id);
-
-	// Set the phrase length.  This includes the 2 spaces as well!
-	void setPhraseLength(int len);
-
-        int setCharCount(int counter, string combo, int count);
-	string getTestCombo(int counter);
-	string getNextTestCombo();
-
-	DictConstraints& getWordConstraints() const;
-
-	void debugprint() const;
-    private:
-	Dictionary *d;
-	string dictFreq;
-	int phraseLen;		// phrase length, including spaces
-
-	// State
-	// Keep a track of all testing done so far
-	vector<pair<string, int> > alphaCounts;
-
-	// Temporary state between calls to getTestCombo
-	string comboToDivide; int testLength;
-
-	int lastCounter;   // Used for nextCombo!
-};
 
 /*
  * Space Finder:
@@ -57,19 +13,23 @@ class TestPatternGenerator {
  * It is known that there are 2 spaces in there, which have to be identified!
  */
 
-// Only dictionary needs to access dictionary entries!  Use friend!
 class SpaceFinder {
     public:
 	// Constructor
-	SpaceFinder(PassPhrase *p, Dictionary *d, int minWordLen, 
-	            int maxWordLen, int phraseLen);
+	//
+	SpaceFinder(Dictionary *d, PassPhrase *p, TestPatternGenerator *tpg,
+		    GuessHistory *hist, int minWordLen, int maxWordLen);
 
 	~SpaceFinder();
 
-	// The main entry point to this class
-	DictConstraints& findSpaces(GuessHistory &hist, 
-				    TestPatternGenerator *tpg,
-	                            int &space1, int &space2);
+	// First test attempt against the matcher.  The return from the matcher
+	// tells us the size of the phrase, use that to initialize various
+	// structures in SpaceFinder, as well as in the TestPatternGenerator
+	int findPhraseLength();
+
+	// The main entry point to this class, used to find the spaces in the
+	// phrase (and hence the word lengths).
+	DictConstraints* findSpaces(int &space1, int &space2);
 
 	void debugprint() const;
 
@@ -77,24 +37,13 @@ class SpaceFinder {
 	// create a string for display purposes only
 	string buildDebugString() const;
 
-	// Append a test phrase (additional) for low frequency characters
-	string appendTestPhrase(string testChars);
-
-	// Build a string to test for spaces.  Test only unknown positions
-	// Half of which should be in test group, and hald in ignore.
-	// n contiguous positions (defined by contig) should be in the same
-	// group.
-	string buildTestString(int contig,
-                               vector<int>& test_group,
-			       vector<int>& ignore_group) const;
-
 	// Build a test string based on the known possible combinations
 	// of spaces, such that at least 1 combination is eliminated with
 	// this.
 	string buildTestString(vector<int>& test_group,
 			       vector<int>& ignore_group) const;
 
-	// Process the response from a match call.  Use the number of 
+	// Process the response from a match call.  Use the number of
 	// positions that matched
 	void processMatchResponse(int pos,
 				 vector<int>& test_group,
@@ -104,18 +53,31 @@ class SpaceFinder {
 	void initialize();
 	void updateInternalState();
 
+	void setMaxPhraseLength(int phraseLen);
+
+	// Append a test phrase (additional) for low frequency characters
+	string appendTestPhrase(string testChars);
+
 	void excludeSet(vector<int> &coll);
 	void foundExclusiveSet(vector<int> &coll);
 
 	int getPairCount() const;
 	void getPair(int &space1, int &space2) const;
 
+	vector<pair<int, int> >* getPairs() const;
+
+	void printPairs() const;
+
+    private:
 	// External State - maintained for ease of use
 	PassPhrase *p;
 	Dictionary *d;
+	TestPatternGenerator *tpg;
+	GuessHistory *hist;
 	int minWordLen;
 	int maxWordLen;
 	int maxPhraseLength;
+	int phraseLength;
 	string dictFreq;
 	bool debug;
 

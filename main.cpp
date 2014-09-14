@@ -1,19 +1,15 @@
 #include <iostream>
-#include <algorithm>
-#include <vector>
-#include <string>
 #include <assert.h>
 
 #include "utils.h"
 #include "passphrase.h"
 #include "dictionary.h"
-#include "spacefinder.h"
 #include "mastermind.h"
 
 using namespace std;
 
 
-int main (int argc, char **argv) 
+int main (int argc, char **argv)
 {
     // Get the phrases from the file
     Dictionary phrases;

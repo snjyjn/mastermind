@@ -5,11 +5,11 @@
 
 using namespace std;
 
-/* 
+/*
  * Passphrase represents a user passphrase.  This consists of 3 dictionary
  * words, separated by a space (hence 2 spaces).  It provides a match
- * functionality which 'leaks' certain information to the requester.  
- * The goal of the requester is to use different techniques to match 
+ * functionality which 'leaks' certain information to the requester.
+ * The goal of the requester is to use different techniques to match
  * the password as reliably as possible.
  */
 
@@ -58,7 +58,7 @@ PassPhrase::match(string candidate, int &positions, int &characters) const {
 
     bool rc = (positions == candidate.length());
     if (debug) {
-	cout << "@" << candidate.substr(0,65) << "@" 
+	cout << "@" << candidate.substr(0,65) << "@"
 	     << ":p " << positions << ":c " << characters
 	     << ": " << rc
 	     << consts::eol;

@@ -1,15 +1,6 @@
 #ifndef __MASTERMIND_H__
 #define __MASTERMIND_H__
 
-#include <iostream>
-#include <algorithm>
-#include <vector>
-#include <string>
-#include <assert.h>
-
-#include "utils.h"
-#include "passphrase.h"
-#include "dictionary.h"
 #include "spacefinder.h"
 
 using namespace std;
@@ -17,7 +8,7 @@ using namespace std;
 // The main solver class.
 class Mastermind {
     public:
-	// Constructor - initialize it with a reference to the dictionary, 
+	// Constructor - initialize it with a reference to the dictionary,
 	// so that it can get some basic stats from there.
 	Mastermind(Dictionary *d);
 
@@ -30,7 +21,7 @@ class Mastermind {
 	string appendTestPhrase(string word, TestPatternGenerator *tpg);
 
 	// Find the length of the phrase,and the count of the most frequent
-	// character (frequency is based on the dictionary, and not the 
+	// character (frequency is based on the dictionary, and not the
 	// phrase).
 	// The string contains (maxPossibleLength) instances of each character
 	// in the alphabet, starting with the most frequent (the others could
@@ -45,7 +36,7 @@ class Mastermind {
 	// 2 words to constrain the dictionary.
 	// See details in the comments in the code!
 	// Build a vector of constraints, to be applied.
-	DictConstraints * createDictConstraints(const string &base_guess, 
+	DictConstraints * createDictConstraints(const string &base_guess,
 			                        const GuessHistory& hist);
 
     private:

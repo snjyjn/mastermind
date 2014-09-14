@@ -16,6 +16,8 @@ class utils {
     public:
 	static char itoc(int i);
 	static int ctoi(char c);
+
+	// SJ TODO : Remove this!
 	static void clearGuessHistory(GuessHistory &gh);
 };
 
@@ -65,9 +67,23 @@ class charCounts {
 
 	int match(const charCounts& other) const;
 
+	// Returns if "other" is a equal of this
+	bool isEqual(const charCounts& other) const;
+
+	// Returns if "other" is a subset of this
+	bool isSubSet(const charCounts& other) const;
+
+	// remove another word from this (repr as a counter)
+	// if other word has chars that are not here (or have a higher count)
+	// that is ignored.  This is the same as Set difference: 
+	// (A - B) is same as (A-(A intersection B))
+	void removeFromCount(const charCounts& other);
+
 	int uniqCounts() const;
 
 	string getCharsByFrequency() const;
+
+	string getChars() const;
 
 	void debugprint() const;
 
@@ -85,19 +101,12 @@ class GuessHistoryElement {
 	string word;		// The word sent to the matcher
 	int pos;		// The number of positions that matched
 	int chars;		// The number of characters that matched
-
-	// Replicate the matcher in passphrase, so that candidates can 
+	// Replicate the matcher in passphrase, so that candidates can
 	// be compared with historical attempts
-	bool phraseMatch(const charCounts &candidateCounts, 
+	bool phraseMatch(const charCounts &candidateCounts,
 	                 const string &candidate) const;
 
 	bool phraseMatch(const string &candidate) const;
-
-	// Use the matcher with words (sub phrases) for early detection of
-	// words that should not be used 
-	// differs in that, it only uses the character counts, and looks for 
-	// a max number of matches.
-	bool subPhraseMatch(const charCounts &candidateCounts) const;
 
     private:
 	charCounts counts;
@@ -113,7 +122,7 @@ class GuessAnalytics {
 	void printAnalysis();
 	void addAttempt();
 
-	void addDictSize(int wordNumber, int attempt, int size);
+	void addDictSize(int wordNumber, int attempt, long long size);
 
 	static const int PHRASELEN = 0;
 	static const int WORDLEN = 1;
@@ -125,8 +134,8 @@ class GuessAnalytics {
 
     private:
 	int count;
-	int dictSizes[5][50];
-	int dictSizeCount[5][50];
+	long long dictSizes[6][50];
+	int dictSizeCount[6][50];
 	int state;
 	vector<int> *attempts;
 };
