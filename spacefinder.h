@@ -31,7 +31,7 @@ class SpaceFinder {
 	// phrase (and hence the word lengths).
 	DictConstraints* findSpaces(int &space1, int &space2);
 
-	void debugprint() const;
+	void debugprint(bool flag = false) const;
 
     private:
 	// create a string for display purposes only

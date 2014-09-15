@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fstream>
+#include <vector>
+#include <algorithm>
 #include <assert.h>
 
 #include "dictionary.h"
@@ -170,6 +172,86 @@ Dictionary::createTestWord() const {
 	}
 	rc.append(1, maxChar);
     }
+    return rc;
+}
+
+typedef pair<pair<int,int> ,int> mytuple;
+
+bool sortfn(mytuple left, mytuple right) {
+    return left.second < right.second;
+}
+
+string 
+Dictionary::createTestWord(const GuessHistory &gh) const {
+    // Initialize data structures
+    int charFrequencyByPosition[maxWordLength][charCounts::charArraySize];
+    for (int i=0; i<maxWordLength; ++i) {
+	for (int j=0; j<charCounts::charArraySize; ++j) {
+	    charFrequencyByPosition[i][j] = 0;
+	}
+    }
+
+    // Iterate over all entries, and all positions, and count!
+    for (vector<DictionaryEntry *>::iterator it=entries->begin();
+         it!= entries->end(); ++it) {
+	const string word = (*it)->getWord();
+	for (int i=0; i<word.length(); ++i) {
+	    int j = utils::ctoi(word[i]);
+	    charFrequencyByPosition[i][j]++;
+	}
+    }
+
+    // Now we build the test word that is consistent with GuessHistory and 
+    // contains highest expectation chars
+    // tuple = (position, ctoi(character), count)
+    vector<mytuple> highFrequencyCharPositions;
+    for (int i=0; i<maxWordLength; ++i) {
+	for (int j=0; j<charCounts::charArraySize; ++j) {
+	    highFrequencyCharPositions.push_back(
+		make_pair(make_pair(i,j), charFrequencyByPosition[i][j]));
+	}
+    }
+    sort(highFrequencyCharPositions.begin(), highFrequencyCharPositions.end(), 
+         sortfn);
+
+    string rc;
+    rc.append(maxWordLength, consts::zpc);
+    int counter = 0;
+    charCounts rcCounts;
+    rcCounts.addToCount(rc);
+    rcCounts[utils::ctoi(consts::zpc)] = 0;
+    while (!highFrequencyCharPositions.empty()) {
+	 mytuple t = highFrequencyCharPositions.back();
+	 highFrequencyCharPositions.pop_back();
+	 int pos = t.first.first;
+	 char c = utils::itoc(t.first.second);
+	 if (rc[pos] == consts::zpc) {
+	     // Add the character to the guess
+	     counter++;
+	     rc[pos] = c;
+	     rcCounts[utils::ctoi(c)]++;
+
+	    // check for consistency with guessHistory
+	    bool match = true;
+	    for (int l=0; (match && l<gh.size()); ++l) {
+		GuessHistoryElement *g = gh[l];
+		if (rcCounts.match(g->counts) > g->chars) {
+		    match = false;
+		}
+	    }
+	    if (match == false) {
+		// Not consistent, remove the character
+		counter--;
+		rc[pos] = consts::zpc;
+		rcCounts[utils::ctoi(c)]--;
+	    }
+	}
+	if (counter == maxWordLength) {
+	    return rc;
+	}
+    }
+    cout << rc;
+    assert(false);
     return rc;
 }
 
@@ -419,11 +501,13 @@ bool PosMatchConstraint::match(const DictionaryEntry *de) const {
 void PosMatchConstraint::explain(const DictionaryEntry *de) const {
     int matchCount = de->positionMatch(word);
     debugprint();
-    cout << "matched : " << matchCount << " with " << de->getWord() << consts::eol;
+    cout << "matched : " << matchCount << " with " << de->getWord() 
+         << consts::eol;
 }
 
 void PosMatchConstraint::debugprint() const {
-    cout << "PosMatchConstraint : " << posMatchCount << " of " << word << consts::eol;
+    cout << "PosMatchConstraint : " << posMatchCount << " of " << word 
+         << consts::eol;
 }
 
 //------------------------------------------------------------------------------
@@ -451,7 +535,8 @@ void
 CharMatchConstraint::explain(const DictionaryEntry *de) const {
     int matchCount = de->characterMatch(counts);
     debugprint();
-    cout << "matched : " << matchCount << " with " << de->getWord() << consts::eol;
+    cout << "matched : " << matchCount << " with " << de->getWord() 
+         << consts::eol;
 }
 
 void

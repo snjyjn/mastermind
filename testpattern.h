@@ -74,7 +74,7 @@ class SpaceTestBuilder {
 	// This method is used to score the quality of a test vector for its
 	// ability to reduce the number of possible position pairs.
 	// 0 is very poor, and larger is better!
-	static long long scorefn(int count0, int count1, int count2);
+	static long scorefn(int count0, int count1, int count2);
 
 	// Given a collection of pairs, identify the best test vector.
 	// This does exhaustive creation of test vectors, scores them and

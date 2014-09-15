@@ -108,6 +108,7 @@ class GuessHistoryElement {
 
 	bool phraseMatch(const string &candidate) const;
 
+	friend class Dictionary;
     private:
 	charCounts counts;
 };

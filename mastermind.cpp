@@ -189,6 +189,12 @@ Mastermind::guess(PassPhrase *p) {
     wordConstraints->clear();
     delete wordConstraints;
 
+    if (debug) {
+	cout << d1->getWordCount() << consts::eol;
+	cout << d2->getWordCount() << consts::eol;
+	cout << d3->getWordCount() << consts::eol;
+    }
+
     Dictionary *phraseDictionary = new Dictionary();
 
     //
@@ -234,9 +240,6 @@ Mastermind::guess(PassPhrase *p) {
     }
 
     if (debug) {
-	cout << d1->getWordCount() << consts::eol;
-	cout << d2->getWordCount() << consts::eol;
-	cout << d3->getWordCount() << consts::eol;
 	cout << phraseDictionary->getWordCount() << consts::eol;
     }
 
@@ -256,10 +259,13 @@ Mastermind::guess(PassPhrase *p) {
     while ((found == false) && (phrases->getWordCount() > 1)) {
 	analytics->addDictSize(4, count4, phrases->getWordCount());
 	if ((attempt == 0) && (phrases->getWordCount() > 50)) {
+	    phraseguess = phrases->createTestWord(guessHistory);
+	} else if ((attempt == 1) && (phrases->getWordCount() > 50)) {
 	    phraseguess = phrases->getGuessWord(1);
 	} else {
 	    phraseguess = phrases->getGuessWord(2);
 	}
+	attempt++;
 	count4++;
 	p->match(phraseguess, pos, chars);
 	guessHistory.push_back(new GuessHistoryElement(w, pos, chars));
@@ -401,24 +407,6 @@ Mastermind::createDictConstraints(const string &base_guess,
 	    DictionaryConstraint *dc
 		= new CharMatchConstraint(pending_counts, pending);
 	    rc->push_back(dc);
-	}
-
-	if (debug) {
-	    cout << "So Far         : @" << base_guess << "@" << consts::eol
-		 << "Previous Guess : @" << g->word << "@" << consts::eol
-		 << "Pending        : @" << pending_str << "@" << consts::eol
-		 << "Stats: (matches: " <<  g->chars << "), (so far: "
-		 << char_matches_so_far << "), (pending: "
-		 << pending << ")" << consts::eol;
-	    for (int i=0; i<charCounts::charArraySize; ++i) {
-		if (word_counts[i] > 0) {
-		    cout << "(" << utils::itoc(i) << ": "
-			 << word_counts[i] << ", "
-			 << base_counts[i] << ", "
-			 << pending_counts[i]  << ")";
-		}
-	    }
-	    cout << consts::eol;
 	}
     }
 

@@ -390,7 +390,6 @@ The results are:
     word 2	854
     word 3	835
     phrase	1000252	38307	1507	112	11	3	2
-		20	16	11	7	4	2	1
 
 Going back to our thinking about the information - it looks like that the 
 phrase dictionary is about a million (20 bits) long on average, and reduces
@@ -399,6 +398,16 @@ bits per guess.
 
 This (9878) is still worse than the winning solution - 9447 and took 10.5 hours on my macbook pro!
 
-Known improvements:
-a. Space Finding - can be improved
-b. Space finding phase - different strategies could be tried
+Bringing back improvements to the space finding (that had been lost), and 
+trying out a modified character finding strategy brings some marginal 
+improvements - mostly due to the space finding.  The characters strat is a 
+wash in my view!
+    Spaces : 6350
+    Phrase : 3428
+    TOTAL  : 9778
+
+    word 0	6838
+    word 1	822
+    word 2	840
+    word 3	825
+    phrase	1012695	26489	1372	100	11	3	2

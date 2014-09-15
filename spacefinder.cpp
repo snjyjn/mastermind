@@ -375,150 +375,92 @@ SpaceFinder::processMatchResponse(int pos,
 string
 SpaceFinder::buildTestString(vector<int>& test_group,
 			     vector<int>& ignore_group) const {
-    bool goal_met = false;
-
     vector<pair<int, int> >* pairs = getPairs();
-    int group[maxPhraseLength];
-    for (int i=0; i<maxPhraseLength; ++i) {
-	group[i] = 0;  // unknown
-    }
     int paircount = pairs->size();
-    if (paircount <= 8) {
-	vector<int> *best = SpaceTestBuilder::getBestTestVector(*pairs);
-	for (vector<int>::iterator it=best->begin(); it!=best->end(); ++it) {
-	    int pos = *it;
-	    group[*it] = 1;
-	}
-	goal_met = true;
-    }
+    int group[maxPhraseLength];
 
     int count0 = 0;   // The number of pairs impacted if 0 is returned
     int count1 = 0;   // The number of pairs impacted if 1 is returned
     int count2 = 0;   // The number of pairs impacted if 2 is returned
+    long score = 0;
 
-    // Goal is count0 == count2, and count0 + count2 == count1
-    int fix_index = 0;	// in case we dont allocate properly, this is the
-			// one we will change
-    int best_grouping[maxPhraseLength];
-    int best_score = -1;
-    while (goal_met == false) {
-    // SJ TODO: Should we do this - or bite the bullet and call getBestVector?
-    //          Careful with that method - it is 2^n complex in number of
-    //          positions.
-	count0 = 0;   // The number of pairs impacted if 0 is returned
-	count1 = 0;   // The number of pairs impacted if 1 is returned
-	count2 = 0;   // The number of pairs impacted if 2 is returned
-	for (vector<pair<int, int> >::iterator it = pairs->begin();
-	     it != pairs->end(); ++it) {
-	     int pos1 = it->first;
-	     int pos2 = it->second;
-	     if ((group[pos1] == 0) && (group[pos2] == 0)) {
-		 // Both positions are open
-		 if ((count0 + count2) <= count1) {
-		     // Put them in the same group
-		     if (count0 <= count2) {
-			 group[pos1] = 1;
-			 group[pos2] = 1;
-			 count0++;
-		     } else {
-			 group[pos1] = 2;
-			 group[pos2] = 2;
-			 count2++;
-		     }
-		 } else {
-		     // Put them in different groups
-		     group[pos1] = 1;
-		     group[pos2] = 2;
-		     count1++;
-		 }
-	     } else if ((group[pos1] != 0) && (group[pos2] != 0)) {
-		 // Both positions are already decided - just count
-		 if (group[pos1] == group[pos2]) {
-		     if (group[pos1] == 1) {
-			 count0++;
-		     } else {
-			 count2++;
-		     }
-		 } else {
-		     count1++;
-		 }
-	     } else {
-		 // One of the positions is decided, the other is not
-		 if ((count0 + count2) <= count1) {
-		     // Choose to put them in the same group
-		     if (group[pos1] == 0) {
-			 group[pos1] = group[pos2];
-		     } else if (group[pos2] == 0) {
-			 group[pos2] = group[pos1];
-		     } else {
-			 assert(false);
-		     }
-		     if (group[pos1] == 1) {
-			 count0++;
-		     } else {
-			 count2++;
-		     }
-		 } else {
-		     // Choose to put them in different groups
-		     if (group[pos1] == 0) {
-			 group[pos1] = (group[pos2] == 1)?2:1;;
-		     } else if (group[pos2] == 0) {
-			 group[pos2] = (group[pos1] == 1)?2:1;;
-		     } else {
-			 assert(false);
-		     }
-		     count1++;
-		 }
-	     }
+    if (paircount > 8) {
+	int best_score = -1; 
+	int best_counter = 0;
+	int positions[countUnknowns];
+	test_group.clear();
+	for (int i=0, j=0; i<maxPhraseLength; ++i) {
+	    group[i] = 0;  // Unknown
+	    if (state[i] == 0) {
+		positions[j] = i;
+		++j;
+	    }
 	}
-	assert((count0 + count1 + count2) == paircount);
-
-	long long  score = SpaceTestBuilder::scorefn(count0, count1, count2);
-
-	if (score > 0) {
-	    goal_met = true;
-	} else {
-	    for (int i=0; i<maxPhraseLength; ++i) {
-		cout << group[i] << " ";
+	for (int counter = 1; counter < 1+(countUnknowns/2); ++counter) {
+	    test_group.clear();
+	    for (int i=0; i<countUnknowns;) {
+		for (int j=0; ((j<counter) && (i<countUnknowns)); ++j,++i) {
+		    group[positions[i]] = 1;  // Test
+		    test_group.push_back(positions[i]);
+		}
+		for (int j=0; ((j<counter) && (i<countUnknowns)); ++j,++i) {
+		    group[positions[i]] = 2;  // Ignore
+		}
 	    }
-	    cout << consts::eol;
-	    cout << "(" << count0 << consts::tab << count1
-	         << consts::tab << count2 << ")"
-	         << consts::tab << score
+	    SpaceTestBuilder::match(test_group, *pairs, count0, count1, count2);
+	    score = SpaceTestBuilder::scorefn(count0, count1, count2);
+	    if (debug) {
+		cout << "counter: " << counter << " "
+		     << "score: " << score
+		     << consts::eol;
+	    }
+	    if (score > best_score) {
+		best_score = score; 
+		best_counter = counter;
+	    }
+	}
+
+	for (int i=0; i<countUnknowns;) {
+	    test_group.clear();
+	    for (int j=0; ((j<best_counter) && (i<countUnknowns)); ++j,++i) {
+		group[positions[i]] = 1;  // Test
+		test_group.push_back(positions[i]);
+	    }
+	    for (int j=0; ((j<best_counter) && (i<countUnknowns)); ++j,++i) {
+		group[positions[i]] = 2;  // Ignore
+	    }
+	}
+	SpaceTestBuilder::match(test_group, *pairs, count0, count1, count2);
+	score = SpaceTestBuilder::scorefn(count0, count1, count2);
+	if (debug) {
+	    cout << "(counter: " << best_counter << ")" << " "
+		 << "(score: " << score << ")" << " "
+		 << "(count0: " << count0 << ")" << " "
+		 << "(count1: " << count1 << ")" << " "
+		 << "(count2: " << count2 << ")" << " "
 		 << consts::eol;
-
-	    // lower is better
-	    if ((fix_index == 0) || (best_score > score)) {	
-		best_score = score;
-		for (int i=0; i<maxPhraseLength; ++i) {
-		    best_grouping[i] = group[i];
-		}
+	}
+    }
+    if ((paircount > 8) && (score == 0)) {
+	debugprint(true);
+	for (int i=0; i<maxPhraseLength; ++i) {
+	    if (group[i] == 1) {
+		cout << i << " ";
 	    }
-	    if (fix_index < paircount) {
-		int pos1, pos2;
+	}
+	cout << consts::eol;
+	cout << count0 << " " << count1 << " " << count2  << " " << consts::eol;
+	assert(false);
+    }
 
-		// Undo the prev pair
-		int prev_fix = fix_index-1;
-		if (prev_fix >= 0) {
-		    pos1 = (*pairs)[prev_fix].first;
-		    pos2 = (*pairs)[prev_fix].second;
-		    group[pos1] = (group[pos1] == 1)?2:1;
-		    group[pos2] = (group[pos2] == 1)?2:1;
-		}
-
-		pos1 = (*pairs)[fix_index].first;
-		pos2 = (*pairs)[fix_index].second;
-		group[pos1] = (group[pos1] == 1)?2:1;
-		group[pos2] = (group[pos2] == 1)?2:1;
-
-		fix_index++;
-	    } else {
-		// give up - go to the best option
-		for (int i=0; i<maxPhraseLength; ++i) {
-		    group[i] = best_grouping[i];
-		}
-		goal_met = true;
-	    }
+    if ((paircount <= 8) || (score == 0)) {
+	for (int i=0; i<maxPhraseLength; ++i) {
+	    group[i] = 0;  // Test
+	}
+	vector<int> *best = SpaceTestBuilder::getBestTestVector(*pairs);
+	for (vector<int>::iterator it=best->begin(); it!=best->end(); ++it) {
+	    int pos = *it;
+	    group[*it] = 1;
 	}
     }
 
@@ -535,8 +477,6 @@ SpaceFinder::buildTestString(vector<int>& test_group,
 	    break;
 	case 0:
 	    switch(group[i]) {
-		// assert(false);
-		// break;
 	    case 1:
 		phrase.append(1, consts::spc);
 		test_group.push_back(i);
@@ -654,11 +594,11 @@ SpaceFinder::printPairs() const {
 }
 
 void
-SpaceFinder::debugprint() const {
+SpaceFinder::debugprint(bool flag) const {
     int pairs = getPairCount();
 
     cout << "Valid combinations: " << pairs << consts::eol;
-    if (pairs < 10) {
+    if (flag || (pairs < 10)) {
 	for (int i=0; i<maxPhraseLength; ++i) {
 	    for (int j=0; j<maxPhraseLength; ++j) {
 		if (possible[i][j] == 1) {

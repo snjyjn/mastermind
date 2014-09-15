@@ -214,6 +214,8 @@ class Dictionary {
 	// else return the word in the middle of the dictionary
 	string getGuessWord(int strategy) const;
 
+	string createTestWord(const GuessHistory &gh) const;
+
 	void debugprint() const;
 
 	string getCharsByFrequency() const;

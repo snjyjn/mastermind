@@ -67,15 +67,17 @@ TestPatternGenerator::initialize() {
     testCases[testCount] = dictFreq;
     testCount++;
 
-    // Top half
-    for (int i=0; i<q2; ++i) {
+    // Alternate Characters
+    for (int i=0; i<uniqChars; i+= 2) {
 	testCases[testCount].append(1, dictFreq[i]);
     }
     testCount++;
 
-    // Middle
-    for (int i=q1; i<q3; ++i) {
+    // Characters 0,1  4,5  8,9
+    for (int i=0; i<dictFreq.size(); i+= 4) {
 	testCases[testCount].append(1, dictFreq[i]);
+	if (i+1 < dictFreq.size())
+	    testCases[testCount].append(1, dictFreq[i+1]);
     }
     testCount++;
 
@@ -92,17 +94,15 @@ TestPatternGenerator::initialize() {
     // skip 1
     testCount++;
 
-    // Alternate Characters
-    for (int i=0; i<uniqChars; i+= 2) {
+    // Top half
+    for (int i=0; i<q2; ++i) {
 	testCases[testCount].append(1, dictFreq[i]);
     }
     testCount++;
 
-    // Characters 0,1  4,5  8,9
-    for (int i=0; i<dictFreq.size(); i+= 4) {
+    // Middle
+    for (int i=q1; i<q3; ++i) {
 	testCases[testCount].append(1, dictFreq[i]);
-	if (i+1 < dictFreq.size())
-	    testCases[testCount].append(1, dictFreq[i+1]);
     }
     testCount++;
 
@@ -393,9 +393,9 @@ SpaceTestBuilder::getTestVector(const unordered_set<int> &node_set, int seq) {
     return rc;
 }
 
-long long
+long
 SpaceTestBuilder::scorefn(int count0, int count1, int count2) {
-    long long score = 0;
+    long score = 0;
     score += count0 * (count1 + count2);
     score += count1 * (count0 + count2);
     score += count2 * (count0 + count1);
@@ -449,7 +449,7 @@ SpaceTestBuilder::getBestTestVector(const vector<pair<int, int> > &pairs) {
 	int count0, count1, count2;
 	vector<int>* testVector = getTestVector(node_set, seq);
 	match(*testVector, pairs, count0, count1, count2);
-	long long score = scorefn(count0, count1, count2);
+	long score = scorefn(count0, count1, count2);
 	if (score > best_score) {
 	    if (rc != NULL)
 		delete rc;
